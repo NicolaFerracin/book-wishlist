@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 
 interface Props {
   onDone: () => void
+  onStarted?: () => void
 }
 
 interface EnrichStatus {
@@ -11,7 +12,7 @@ interface EnrichStatus {
   currentTitle: string
 }
 
-export default function EnrichButton({ onDone }: Props) {
+export default function EnrichButton({ onDone, onStarted }: Props) {
   const [status, setStatus] = useState<EnrichStatus | null>(null)
   const [starting, setStarting] = useState(false)
   const prevRunning = useRef(false)
@@ -33,7 +34,9 @@ export default function EnrichButton({ onDone }: Props) {
 
   const start = async () => {
     setStarting(true)
-    await fetch('/api/enrich', { method: 'POST' })
+    const res = await fetch('/api/enrich', { method: 'POST' })
+    const data = await res.json()
+    if (data.started) onStarted?.()
     setStarting(false)
   }
 

@@ -14,6 +14,7 @@ interface ScrapeStatus {
 interface Props {
   onDone: () => void
   scrapeQuery?: string
+  onStarted?: () => void
 }
 
 const CUR: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' }
@@ -46,7 +47,7 @@ function StopButton() {
   )
 }
 
-export default function BulkScrapePanel({ onDone, scrapeQuery = '' }: Props) {
+export default function BulkScrapePanel({ onDone, scrapeQuery = '', onStarted }: Props) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<ScrapeStatus | null>(null)
   const [starting, setStarting] = useState(false)
@@ -87,7 +88,8 @@ export default function BulkScrapePanel({ onDone, scrapeQuery = '' }: Props) {
     setStarting(true)
     try {
       const res = await fetch(`/api/scrape-all?force=${force ? 1 : 0}&${scrapeQuery}`, { method: 'POST' })
-      await res.json()
+      const data = await res.json()
+      if (data.started) onStarted?.()
     } finally {
       setStarting(false)
     }

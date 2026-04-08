@@ -6,6 +6,7 @@ import DealsView from './components/DealsView'
 import ImportModal from './components/ImportModal'
 import LogsModal from './components/LogsModal'
 import EnrichButton from './components/EnrichButton'
+import Toast from './components/Toast'
 import { addBook, deleteBook, getBooks, updateBook } from './lib/api'
 import type { WishlistBook } from './types'
 
@@ -29,6 +30,7 @@ export default function App() {
   const [excludeUS, setExcludeUS] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
   const [region, setRegion] = useState(() => localStorage.getItem('bw-region') || 'pt')
 
   const regionConfig = REGIONS[region] || REGIONS.es
@@ -98,8 +100,8 @@ export default function App() {
               <option key={key} value={key}>{r.label}</option>
             ))}
           </select>
-          <BulkScrapePanel onDone={refresh} scrapeQuery={scrapeQuery} />
-          <EnrichButton onDone={refresh} />
+          <BulkScrapePanel onDone={refresh} scrapeQuery={scrapeQuery} onStarted={() => setToast('Price check running in the background — you can close this window.')} />
+          <EnrichButton onDone={refresh} onStarted={() => setToast('Metadata enrichment running in the background — you can close this window.')} />
           <button
             onClick={() => setShowLogs(true)}
             className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-sm transition-colors border border-slate-700"
@@ -235,6 +237,7 @@ export default function App() {
           onDelete={editingBook ? handleDelete : undefined}
         />
       )}
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
     </div>
   )
 }
