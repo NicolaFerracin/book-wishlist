@@ -1,8 +1,9 @@
 node_modules/
 dist/
 
-# Personal data — don't commit your book list or prices
+# Personal data — don't commit your book list, prices, or logs
 data/wishlist.json
+data/logs.json
 
 # Keep the empty data dir with a placeholder
 !data/.gitkeep

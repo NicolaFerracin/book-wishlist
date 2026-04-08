@@ -134,7 +134,7 @@ async function scrapeIsbn(isbn: string, opts: ScrapeOptions = DEFAULT_OPTIONS): 
     const all = [...abeSellers, ...amzSellers, ...bfSellers]
     return all.sort((a, b) => a.price - b.price)
   } catch (e) {
-    console.error(`  scrape error for ${isbn}:`, (e as Error).message)
+    // Error logged by caller
     return []
   } finally {
     await Promise.all(pages.map(p => p.close()))

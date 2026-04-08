@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
-import { getBooks, addBook, updateBook, deleteBook } from './lib/api'
+import { useCallback, useEffect, useState } from 'react'
 import BookCard from './components/BookCard'
 import BookFormModal from './components/BookFormModal'
 import BulkScrapePanel from './components/BulkScrapePanel'
-import ImportModal from './components/ImportModal'
 import DealsView from './components/DealsView'
+import ImportModal from './components/ImportModal'
+import LogsModal from './components/LogsModal'
+import EnrichButton from './components/EnrichButton'
+import { addBook, deleteBook, getBooks, updateBook } from './lib/api'
 import type { WishlistBook } from './types'
 
 const REGIONS: Record<string, { label: string; amazonDomain: string; currency: string; country: string }> = {
@@ -14,7 +16,6 @@ const REGIONS: Record<string, { label: string; amazonDomain: string; currency: s
   de: { label: 'Germany', amazonDomain: 'amazon.de', currency: 'EUR', country: 'de' },
   fr: { label: 'France', amazonDomain: 'amazon.fr', currency: 'EUR', country: 'fr' },
   uk: { label: 'United Kingdom', amazonDomain: 'amazon.co.uk', currency: 'GBP', country: 'gb' },
-  us: { label: 'United States', amazonDomain: 'amazon.com', currency: 'USD', country: 'us' },
 }
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
   const [expandPrices, setExpandPrices] = useState(false)
   const [excludeUS, setExcludeUS] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showLogs, setShowLogs] = useState(false)
   const [region, setRegion] = useState(() => localStorage.getItem('bw-region') || 'pt')
 
   const regionConfig = REGIONS[region] || REGIONS.es
@@ -97,6 +99,16 @@ export default function App() {
             ))}
           </select>
           <BulkScrapePanel onDone={refresh} scrapeQuery={scrapeQuery} />
+          <EnrichButton onDone={refresh} />
+          <button
+            onClick={() => setShowLogs(true)}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-sm transition-colors border border-slate-700"
+            title="View logs"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </button>
           <button
             onClick={() => setShowImport(true)}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm transition-colors border border-slate-700"
@@ -178,7 +190,7 @@ export default function App() {
           </div>
         ) : books.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-            <div className="text-5xl mb-4 opacity-30">📚</div>
+            <div className="text-5xl mb-4">📚</div>
             <h2 className="text-lg font-semibold text-white mb-2">Your wishlist is empty</h2>
             <p className="text-slate-500 text-sm mb-6 max-w-xs">Add books you want to read or buy and check second-hand prices across editions.</p>
             <button onClick={() => setShowForm(true)} className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-xl transition-colors">
@@ -205,6 +217,8 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {showLogs && <LogsModal onClose={() => setShowLogs(false)} />}
 
       {showImport && (
         <ImportModal

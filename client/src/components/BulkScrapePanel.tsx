@@ -95,7 +95,7 @@ export default function BulkScrapePanel({ onDone, scrapeQuery = '' }: Props) {
 
       {/* Panel */}
       {open && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 pt-[8vh] min-h-screen">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 pt-[8vh] min-h-screen" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false) }}>
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[80vh]">
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-800 flex-shrink-0">
@@ -187,7 +187,7 @@ export default function BulkScrapePanel({ onDone, scrapeQuery = '' }: Props) {
                   onClick={async () => { await fetch('/api/scrape-all/stop', { method: 'POST' }) }}
                   className="px-5 py-2.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm font-medium transition-colors hover:bg-red-500/30"
                 >
-                  Stop
+                  Stop after current book
                 </button>
               ) : (
                 <>

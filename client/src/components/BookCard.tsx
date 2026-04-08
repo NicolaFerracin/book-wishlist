@@ -12,6 +12,17 @@ interface Props {
   scrapeQuery?: string
 }
 
+const SOURCE_STYLES: Record<string, { bg: string; label: string }> = {
+  abebooks:   { bg: 'bg-blue-500/15 text-blue-400',   label: 'ABE' },
+  amazon:     { bg: 'bg-orange-500/15 text-orange-400', label: 'AMZ' },
+  bookfinder: { bg: 'bg-purple-500/15 text-purple-400', label: 'BF' },
+}
+
+function SourceBadge({ source }: { source?: string }) {
+  const s = SOURCE_STYLES[source ?? ''] ?? { bg: 'bg-slate-700 text-slate-400', label: source?.slice(0, 3).toUpperCase() ?? '???' }
+  return <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 ${s.bg}`}>{s.label}</span>
+}
+
 const CURRENCY_SYMBOL: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' }
 
 function formatPrice(price: number, currency: string) {
@@ -178,13 +189,7 @@ export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excl
                         className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 transition-colors group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          {seller.source && (
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                              seller.source === 'amazon' ? 'bg-orange-500/15 text-orange-400' :
-                              seller.source === 'bookfinder' ? 'bg-purple-500/15 text-purple-400' :
-                              'bg-blue-500/15 text-blue-400'
-                            }`}>{seller.source === 'abebooks' ? 'ABE' : seller.source === 'amazon' ? 'AMZ' : 'BF'}</span>
-                          )}
+                          <SourceBadge source={seller.source} />
                           <span className="text-xs text-slate-300 truncate">{seller.name}</span>
                           {seller.condition && (
                             <span className="text-[10px] text-slate-600 truncate">{seller.condition}</span>

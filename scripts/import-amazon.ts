@@ -71,7 +71,11 @@ function splitNameAuthor(raw: string): { title: string; author: string } {
 function parseJsonFile(filepath: string): { listName: string; books: { title: string; author: string; asin?: string; coverUrl?: string; dateAdded?: string; notes?: string }[] } {
   const raw = JSON.parse(readFileSync(filepath, 'utf-8')) as AmazonExport
   const books = raw.items.map((item) => {
-    const { title, author } = splitNameAuthor(item.name)
+    let { title, author } = splitNameAuthor(item.name)
+    // If title is suspiciously short and comment looks like a real title, use it
+    if (title.split(/\s+/).length <= 1 && item.comment && item.comment.length > title.length) {
+      title = item.comment.trim()
+    }
     return {
       title,
       author,

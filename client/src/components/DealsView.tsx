@@ -28,6 +28,17 @@ interface Props {
 }
 
 const CUR: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' }
+
+const SOURCE_STYLES: Record<string, { bg: string; label: string }> = {
+  abebooks:   { bg: 'bg-blue-500/15 text-blue-400',   label: 'ABE' },
+  amazon:     { bg: 'bg-orange-500/15 text-orange-400', label: 'AMZ' },
+  bookfinder: { bg: 'bg-purple-500/15 text-purple-400', label: 'BF' },
+}
+
+function SourceBadge({ source }: { source?: string }) {
+  const s = SOURCE_STYLES[source ?? ''] ?? { bg: 'bg-slate-700 text-slate-400', label: source?.slice(0, 3).toUpperCase() ?? '???' }
+  return <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 ${s.bg}`}>{s.label}</span>
+}
 function fmtPrice(price: number, currency: string) {
   return `${CUR[currency] ?? currency}${price.toFixed(2)}`
 }
@@ -54,13 +65,7 @@ function DealRow({ deal, showBook = true }: { deal: Deal; showBook?: boolean }) 
           {deal.book.title}
         </p>
         <p className="text-[11px] text-slate-500 truncate mt-0.5 flex items-center gap-1.5">
-          {deal.source && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-              deal.source === 'amazon' ? 'bg-orange-500/15 text-orange-400' :
-              deal.source === 'bookfinder' ? 'bg-purple-500/15 text-purple-400' :
-              'bg-blue-500/15 text-blue-400'
-            }`}>{deal.source === 'abebooks' ? 'ABE' : deal.source === 'amazon' ? 'AMZ' : 'BF'}</span>
-          )}
+          <SourceBadge source={deal.source} />
           {showBook ? (
             <span className="truncate">
               {deal.seller}
@@ -171,8 +176,12 @@ export default function DealsView({ books, excludeUS }: Props) {
     for (const g of map.values()) {
       g.uniqueBooks = new Set(g.deals.map(d => d.book.id)).size
     }
-    // Sort by average price per book (cheapest seller first)
-    return [...map.values()].sort((a, b) => (a.totalPrice / a.uniqueBooks) - (b.totalPrice / b.uniqueBooks))
+    // Sort by cheapest single item (so the seller with the best deal shows first)
+    return [...map.values()].sort((a, b) => {
+      const aMin = Math.min(...a.deals.map(d => d.price))
+      const bMin = Math.min(...b.deals.map(d => d.price))
+      return aMin - bMin
+    })
   }, [deals])
 
   if (deals.length === 0) {

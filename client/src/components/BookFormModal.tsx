@@ -172,7 +172,7 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
   const labelCls = 'block text-xs font-medium text-slate-400 mb-1.5'
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 pt-[10vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 pt-[10vh] overflow-y-auto" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <h2 className="text-lg font-semibold text-white">{book ? 'Edit Book' : 'Add to Wishlist'}</h2>
