@@ -84,6 +84,16 @@ async function scrapeAmazon(isbn: string, page: Page, opts: ScrapeOptions): Prom
 
 // ── Source: BookFinder (aggregator, configurable destination) ─────────────────
 
+// Amazon domains to exclude — too far for reasonable shipping to Europe
+const EXCLUDED_DOMAINS = [
+  'amazon.in', 'amazon.co.jp', 'amazon.com.br', 'amazon.com.au',
+  'amazon.sg', 'amazon.ae', 'amazon.sa', 'amazon.com.mx',
+]
+
+function isExcludedDomain(url: string): boolean {
+  return EXCLUDED_DOMAINS.some(d => url.includes(d))
+}
+
 async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): Promise<Seller[]> {
   const url = `https://www.bookfinder.com/isbn/${isbn}/?currency=${opts.currency}&destination=${opts.country}&mode=basic&st=sh&ac=qr`
   try {
@@ -116,6 +126,7 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
       const seen = new Set<string>()
       return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true })
     }) as Seller[]
+    return sellers.filter(s => !isExcludedDomain(s.url))
   } catch { return [] }
 }
 
@@ -146,12 +157,17 @@ async function scrapeIsbn(isbn: string, opts: ScrapeOptions = DEFAULT_OPTIONS): 
 export async function scrapeBook(
   book: { isbn?: string; asin?: string; isbns: string[] },
   opts: ScrapeOptions = DEFAULT_OPTIONS,
-  maxAttempts = 10,
+  maxAttempts = 8,
   concurrency = 2,
 ): Promise<PriceResult[]> {
-  const candidates = [...new Set([book.isbn, book.asin, ...book.isbns].filter(Boolean))] as string[]
+  // Prioritize the user's specific ISBN/ASIN first (the edition they actually want),
+  // then try a few other edition ISBNs. This avoids checking unrelated language editions.
+  const primary = [book.isbn, book.asin].filter(Boolean) as string[]
+  const others = book.isbns.filter(i => !primary.includes(i))
+  const candidates = [...new Set([...primary, ...others])]
   if (candidates.length === 0) return []
 
+  // Check primary ISBNs + a limited number of others
   const toCheck = candidates.slice(0, maxAttempts)
   const results: PriceResult[] = []
 
