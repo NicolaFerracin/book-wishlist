@@ -25,6 +25,27 @@ function elapsed(iso: string) {
   return `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
+function StopButton() {
+  const [stopping, setStopping] = useState(false)
+  const handleStop = async () => {
+    setStopping(true)
+    await fetch('/api/scrape-all/stop', { method: 'POST' })
+  }
+  return stopping ? (
+    <div className="flex items-center gap-2 px-5 py-2.5 text-sm text-red-400">
+      <div className="w-3.5 h-3.5 border-2 border-red-800 border-t-red-400 rounded-full animate-spin" />
+      Stopping after current book...
+    </div>
+  ) : (
+    <button
+      onClick={handleStop}
+      className="px-5 py-2.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm font-medium transition-colors hover:bg-red-500/30"
+    >
+      Stop after current book
+    </button>
+  )
+}
+
 export default function BulkScrapePanel({ onDone, scrapeQuery = '' }: Props) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<ScrapeStatus | null>(null)
@@ -183,12 +204,7 @@ export default function BulkScrapePanel({ onDone, scrapeQuery = '' }: Props) {
             {/* Actions */}
             <div className="p-5 border-t border-slate-800 flex items-center gap-3 flex-shrink-0">
               {status.running ? (
-                <button
-                  onClick={async () => { await fetch('/api/scrape-all/stop', { method: 'POST' }) }}
-                  className="px-5 py-2.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm font-medium transition-colors hover:bg-red-500/30"
-                >
-                  Stop after current book
-                </button>
+                <StopButton />
               ) : (
                 <>
                   <button
