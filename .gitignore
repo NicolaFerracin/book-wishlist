@@ -1,0 +1,8 @@
+node_modules/
+dist/
+
+# Personal data — don't commit your book list or prices
+data/wishlist.json
+
+# Keep the empty data dir with a placeholder
+!data/.gitkeep
