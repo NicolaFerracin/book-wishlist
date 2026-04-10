@@ -68,6 +68,17 @@ async function scrapeAmazon(isbn: string, page: Page, opts: ScrapeOptions): Prom
     return await page.evaluate(({ domain, currency }) => {
       const out: { name: string; price: number; currency: string; condition?: string; url: string; source: string }[] = []
       document.querySelectorAll('[data-component-type="s-search-result"]').forEach(card => {
+        const cardText = card.textContent?.toLowerCase() ?? ''
+        // Skip Kindle, ebook, audiobook, and audible results
+        if (/kindle|ebook|e-book|audible|audiobook|audio cd|formato digital/.test(cardText)) {
+          // Check if it also has a physical format — if not, skip entirely
+          if (!/paperback|hardcover|tapa blanda|tapa dura|pasta blanda/.test(cardText)) return
+        }
+        // Skip links to Kindle ASINs (dp/B...)
+        const linkEl = card.querySelector('a.a-link-normal[href*="/dp/"]') as HTMLAnchorElement | null
+        const rawHref = linkEl?.getAttribute('href') ?? ''
+        if (/\/dp\/B[A-Z0-9]{9}/.test(rawHref)) return
+
         const wholeEl = card.querySelector('.a-price .a-price-whole')
         const fracEl = card.querySelector('.a-price .a-price-fraction')
         if (!wholeEl) return
@@ -75,8 +86,7 @@ async function scrapeAmazon(isbn: string, page: Page, opts: ScrapeOptions): Prom
         const frac = fracEl?.textContent?.trim() ?? '00'
         const price = parseFloat(`${whole}.${frac}`)
         if (isNaN(price) || price <= 0) return
-        const linkEl = card.querySelector('a.a-link-normal[href*="/dp/"]') as HTMLAnchorElement | null
-        const href = linkEl ? `https://www.${domain}${linkEl.getAttribute('href')}` : ''
+        const href = linkEl ? `https://www.${domain}${rawHref}` : ''
         out.push({ name: domain, price, currency, condition: 'New', url: href, source: 'amazon' })
       })
       return out.slice(0, 5)
@@ -87,13 +97,12 @@ async function scrapeAmazon(isbn: string, page: Page, opts: ScrapeOptions): Prom
 // ── Source: BookFinder (aggregator, configurable destination) ─────────────────
 
 // Amazon domains to exclude — too far for reasonable shipping to Europe
-const EXCLUDED_DOMAINS = [
-  'amazon.in', 'amazon.co.jp', 'amazon.com.br', 'amazon.com.au',
-  'amazon.sg', 'amazon.ae', 'amazon.sa', 'amazon.com.mx',
-]
-
-function isExcludedDomain(url: string): boolean {
-  return EXCLUDED_DOMAINS.some(d => url.includes(d))
+function isExcludedDomain(url: string, opts: ScrapeOptions): boolean {
+  // If it's an Amazon link, only allow the user's selected domain
+  if (url.includes('amazon.')) {
+    return !url.includes(opts.amazonDomain)
+  }
+  return false
 }
 
 async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): Promise<Seller[]> {
@@ -131,7 +140,7 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
       const seen = new Set<string>()
       return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true })
     }) as Seller[]
-    return sellers.filter(s => !isExcludedDomain(s.url))
+    return sellers.filter(s => !isExcludedDomain(s.url, opts))
   } catch { return [] }
 }
 
