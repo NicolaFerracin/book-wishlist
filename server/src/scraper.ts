@@ -169,14 +169,23 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         }
         const shipping = shipVal
         const totalPrice = shipping !== undefined ? price + shipping : price
-        // Resolve affiliate redirect URLs to their actual destination
+        // Clean up URLs
         let resolvedHref = href
+        // Resolve affiliate redirects
         if (href.includes('affiliates.abebooks.com')) {
           try {
             const uParam = new URL(href).searchParams.get('u')
             if (uParam) resolvedHref = uParam.startsWith('http') ? uParam : `https://${uParam}`
           } catch {}
         }
+        // ShopBasket (add-to-cart) → BookDetailsPL (view page)
+        const basketMatch = resolvedHref.match(/\/servlet\/ShopBasket.*?[?&]ik=(\d+)/)
+        if (basketMatch) {
+          const domain = resolvedHref.includes('zvab.com') ? 'www.iberlibro.com' : new URL(resolvedHref).hostname
+          resolvedHref = `https://${domain}/servlet/BookDetailsPL?bi=${basketMatch[1]}`
+        }
+        // Normalize zvab.com → iberlibro.com
+        resolvedHref = resolvedHref.replace(/zvab\.com/g, 'iberlibro.com')
         results.push({ name: seller || 'BookFinder', price, shipping, totalPrice, currency: 'EUR', condition, url: resolvedHref, source: 'bookfinder' })
       })
       const seen = new Set<string>()
