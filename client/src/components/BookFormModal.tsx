@@ -342,7 +342,17 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
           {/* Title search */}
           <div className="relative">
             <label className={labelCls}>Title *</label>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} placeholder="Search or enter book title..." required autoFocus />
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => setTimeout(() => setShowResults(false), 200)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setShowResults(false) }}
+              className={inputCls}
+              placeholder="Search or enter book title..."
+              required
+              autoFocus
+            />
             {searching && (
               <div className="absolute right-3 top-8">
                 <div className="w-4 h-4 border-2 border-slate-600 border-t-amber-400 rounded-full animate-spin" />
