@@ -360,6 +360,109 @@ app.post('/api/enrich', (_req, res) => {
   })()
 })
 
+// ── ISBN cleanup (re-filter editions by language/format) ─────────────────────
+
+interface CleanupState { running: boolean; current: number; total: number; currentTitle: string; removed: number }
+const cleanupState: CleanupState = { running: false, current: 0, total: 0, currentTitle: '', removed: 0 }
+let cleanupAborted = false
+
+app.get('/api/cleanup-isbns/status', (_req, res) => { res.json(cleanupState) })
+
+app.post('/api/cleanup-isbns/stop', (_req, res) => {
+  if (!cleanupState.running) return res.json({ ok: false })
+  cleanupAborted = true
+  res.json({ ok: true })
+})
+
+app.post('/api/cleanup-isbns', (_req, res) => {
+  if (cleanupState.running) return res.status(409).json({ error: 'Already running' })
+
+  const books = readBooks()
+  const toClean = books.filter(b => b.isbns.length > 1 && (b.isbn || b.asin))
+
+  if (toClean.length === 0) return res.json({ started: false, message: 'No books need cleanup.' })
+
+  cleanupState.running = true
+  cleanupState.current = 0
+  cleanupState.total = toClean.length
+  cleanupState.currentTitle = toClean[0]?.title ?? ''
+  cleanupState.removed = 0
+  cleanupAborted = false
+
+  res.json({ started: true, total: toClean.length })
+
+  const AUDIO_RE = /audio|cd|mp3|cassette|spoken/i
+
+  ;(async () => {
+    try {
+      for (let i = 0; i < toClean.length; i++) {
+        if (cleanupAborted) break
+        const book = toClean[i]
+        cleanupState.current = i
+        cleanupState.currentTitle = book.title
+
+        const primaryIsbn = (book.isbn || book.asin || '').replace(/[-\s]/g, '')
+        if (!primaryIsbn) continue
+
+        try {
+          // Get language of primary edition
+          const isbnRes = await fetch(`https://openlibrary.org/isbn/${primaryIsbn}.json`)
+          if (!isbnRes.ok) continue
+          const isbnData = await isbnRes.json()
+          const lang = isbnData.languages?.[0]?.key?.replace('/languages/', '')
+          const workKey = isbnData.works?.[0]?.key
+          if (!workKey) continue
+
+          // Fetch all editions with metadata
+          const edRes = await fetch(`https://openlibrary.org${workKey}/editions.json?limit=100`)
+          if (!edRes.ok) continue
+          const edData = await edRes.json()
+
+          const goodIsbns = new Set<string>()
+          for (const entry of edData.entries || []) {
+            const edLang = entry.languages?.[0]?.key?.replace('/languages/', '')
+            const format = entry.physical_format || ''
+
+            // Skip audiobooks
+            if (AUDIO_RE.test(format)) continue
+            // Skip wrong language (if we know both)
+            if (lang && edLang && edLang !== lang) continue
+
+            for (const isbn of [...(entry.isbn_13 || []), ...(entry.isbn_10 || [])]) {
+              goodIsbns.add(isbn)
+            }
+          }
+
+          // Always keep the primary ISBN
+          goodIsbns.add(primaryIsbn)
+
+          const before = book.isbns.length
+          const filtered = book.isbns.filter(i => goodIsbns.has(i))
+          // Only update if we actually removed something
+          if (filtered.length < before) {
+            const fresh = readBooks()
+            const idx = fresh.findIndex(b => b.id === book.id)
+            if (idx !== -1) {
+              fresh[idx].isbns = filtered.length > 0 ? filtered : [primaryIsbn]
+              writeBooks(fresh)
+              cleanupState.removed += before - filtered.length
+            }
+          }
+        } catch (e) {
+          log('warn', 'cleanup', `Failed to clean ISBNs for "${book.title}"`, (e as Error).message)
+        }
+
+        await new Promise(r => setTimeout(r, 300))
+      }
+    } finally {
+      cleanupState.running = false
+      cleanupState.current = cleanupState.total
+      cleanupState.currentTitle = ''
+      console.log(`ISBN cleanup done: removed ${cleanupState.removed} ISBNs`)
+    }
+  })()
+})
+
 // ── Price scraping ────────────────────────────────────────────────────────────
 
 app.post('/api/books/:id/scrape', async (req, res) => {

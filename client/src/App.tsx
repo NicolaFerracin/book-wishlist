@@ -6,6 +6,7 @@ import DealsView from './components/DealsView'
 import ImportModal from './components/ImportModal'
 import LogsModal from './components/LogsModal'
 import EnrichButton from './components/EnrichButton'
+import CleanupButton from './components/CleanupButton'
 import Toast from './components/Toast'
 import { addBook, deleteBook, getBooks, updateBook } from './lib/api'
 import type { WishlistBook } from './types'
@@ -101,6 +102,7 @@ export default function App() {
             ))}
           </select>
           <BulkScrapePanel onDone={refresh} scrapeQuery={scrapeQuery} onStarted={() => setToast('Price check running in the background — you can close this window.')} />
+          <CleanupButton onDone={refresh} onStarted={() => setToast('ISBN cleanup running — removing audiobooks and wrong-language editions.')} />
           <EnrichButton onDone={refresh} onStarted={() => setToast('Metadata enrichment running in the background — you can close this window.')} />
           <button
             onClick={() => setShowLogs(true)}
