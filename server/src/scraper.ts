@@ -47,7 +47,9 @@ async function scrapeAbebooks(isbn: string, page: Page): Promise<Seller[]> {
         const name = spans[0]?.textContent?.trim() || 'Unknown'
         const location = spans[1]?.textContent?.trim()
         const condition = li.querySelector('.opt-subcondition')?.textContent?.trim()
-        const href = (li.querySelector('a[href*="iberlibro"], a[href^="/"]') as HTMLAnchorElement | null)?.href || ''
+        // Direct listing link: /BookTitle/ID/bd
+        const detailLink = li.querySelector('a[href$="/bd"]') as HTMLAnchorElement | null
+        const href = detailLink?.href || ''
         if (href) out.push({ name, price, currency: m[1], condition, location, url: href, source: 'abebooks' })
       })
       return out
