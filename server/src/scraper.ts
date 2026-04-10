@@ -16,6 +16,24 @@ export async function closeBrowser() {
 
 async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
+// Parse European-formatted price: "1.911,50" → 1911.5, "12,95" → 12.95, "3.00" → 3.0
+function parseEurPrice(raw: string): number {
+  let s = raw.trim()
+  // If has both dot and comma: dot is thousand sep, comma is decimal (e.g., "1.911,50")
+  if (s.includes('.') && s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  }
+  // If has dot followed by exactly 3 digits (and nothing after): thousand sep (e.g., "1.911")
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, '')
+  }
+  // If has comma: it's a decimal separator (e.g., "12,95")
+  else if (s.includes(',')) {
+    s = s.replace(',', '.')
+  }
+  return parseFloat(s)
+}
+
 export interface ScrapeOptions {
   amazonDomain: string   // e.g. "amazon.es", "amazon.it", "amazon.de"
   currency: string       // e.g. "EUR", "GBP"
@@ -41,7 +59,11 @@ async function scrapeAbebooks(isbn: string, page: Page): Promise<Seller[]> {
         const priceText = li.querySelector('p.item-price')?.textContent?.trim() ?? ''
         const m = priceText.match(/([A-Z]{3})\s*([\d.,]+)/)
         if (!m) return
-        const price = parseFloat(m[2].replace(',', '.'))
+        let raw = m[2]
+        if (raw.includes('.') && raw.includes(',')) { raw = raw.replace(/\./g, '').replace(',', '.') }
+        else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) { raw = raw.replace(/\./g, '') }
+        else if (raw.includes(',')) { raw = raw.replace(',', '.') }
+        const price = parseFloat(raw)
         if (isNaN(price) || price <= 0) return
         const spans = li.querySelectorAll('.bookseller-info span')
         const name = spans[0]?.textContent?.trim() || 'Unknown'
@@ -117,7 +139,11 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         const text = a.textContent?.trim() || ''
         const m = text.match(/^€([\d.,]+)$/)
         if (!m || href.includes('bookfinder.com')) return
-        const price = parseFloat(m[1].replace(',', '.'))
+        let raw = m[1]
+        if (raw.includes('.') && raw.includes(',')) { raw = raw.replace(/\./g, '').replace(',', '.') }
+        else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) { raw = raw.replace(/\./g, '') }
+        else if (raw.includes(',')) { raw = raw.replace(',', '.') }
+        const price = parseFloat(raw)
         if (isNaN(price) || price <= 0) return
 
         // Walk up to find row and extract metadata
@@ -133,7 +159,15 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         const condMatch = rowText.match(/Condition:\s*([^\n€]+)/i) || rowText.match(/(Used\s*-\s*[\w ]+|New|Like New)/i)
         const condition = condMatch?.[1]?.trim()
         const shipMatch = rowText.match(/shipping:\s*€([\d.,]+)/i)
-        const shipping = shipMatch ? parseFloat(shipMatch[1].replace(',', '.')) : undefined
+        let shipVal: number | undefined
+        if (shipMatch) {
+          let sr = shipMatch[1]
+          if (sr.includes('.') && sr.includes(',')) { sr = sr.replace(/\./g, '').replace(',', '.') }
+          else if (/^\d{1,3}(\.\d{3})+$/.test(sr)) { sr = sr.replace(/\./g, '') }
+          else if (sr.includes(',')) { sr = sr.replace(',', '.') }
+          shipVal = parseFloat(sr)
+        }
+        const shipping = shipVal
         const totalPrice = shipping !== undefined ? price + shipping : price
         results.push({ name: seller || 'BookFinder', price, shipping, totalPrice, currency: 'EUR', condition, url: href, source: 'bookfinder' })
       })
