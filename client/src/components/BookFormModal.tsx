@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { searchBooks, lookupByIsbn, fetchAllIsbns } from '../lib/openLibrary'
+import { searchBooks, lookupByIsbn, fetchAllIsbns, fetchEditions, type Edition } from '../lib/openLibrary'
 import type { WishlistBook, OpenLibraryResult } from '../types'
 
 type BookInput = Omit<WishlistBook, 'id' | 'addedAt' | 'prices'>
@@ -9,6 +9,89 @@ interface Props {
   onSave: (data: BookInput) => Promise<void>
   onClose: () => void
   onDelete?: () => Promise<void>
+}
+
+function IsbnManager({ isbns, onChange, book }: { isbns: string[]; onChange: (v: string[]) => void; book: WishlistBook | null }) {
+  const [expanded, setExpanded] = useState(false)
+  const [editions, setEditions] = useState<Map<string, Edition>>(new Map())
+  const [loadingEditions, setLoadingEditions] = useState(false)
+
+  const loadEditionDetails = async () => {
+    if (editions.size > 0 || !book) return
+    setLoadingEditions(true)
+    // Try to get the workKey from the primary ISBN
+    const primaryIsbn = book.isbn || isbns[0]
+    if (primaryIsbn) {
+      try {
+        const res = await fetch(`https://openlibrary.org/isbn/${primaryIsbn.replace(/[-\s]/g, '')}.json`)
+        if (res.ok) {
+          const data = await res.json()
+          const workKey = data.works?.[0]?.key
+          if (workKey) {
+            const eds = await fetchEditions(workKey)
+            const map = new Map<string, Edition>()
+            for (const e of eds) map.set(e.isbn, e)
+            setEditions(map)
+          }
+        }
+      } catch {}
+    }
+    setLoadingEditions(false)
+  }
+
+  const handleExpand = () => {
+    if (!expanded) loadEditionDetails()
+    setExpanded(v => !v)
+  }
+
+  const remove = (isbn: string) => onChange(isbns.filter(i => i !== isbn))
+
+  return (
+    <div className="bg-slate-800/30 rounded-xl px-3 py-2">
+      <button type="button" onClick={handleExpand} className="flex items-center justify-between w-full text-xs text-slate-500 hover:text-slate-300 transition-colors">
+        <span>{isbns.length} edition{isbns.length !== 1 ? 's' : ''} — prices checked across all</span>
+        <svg className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+          {loadingEditions && <p className="text-[10px] text-slate-600 py-1">Loading edition details...</p>}
+          {isbns.map(isbn => {
+            const ed = editions.get(isbn)
+            return (
+              <div key={isbn} className="flex items-center gap-2 py-1 group">
+                <span className="text-[11px] font-mono text-slate-400 w-28 flex-shrink-0">{isbn}</span>
+                <span className="text-[10px] text-slate-600 truncate flex-1">
+                  {ed ? (
+                    <>
+                      {ed.language && <span className="uppercase">{ed.language}</span>}
+                      {ed.format && <span> · {ed.format}</span>}
+                      {ed.publisher && <span> · {ed.publisher}</span>}
+                      {ed.year && <span> · {ed.year}</span>}
+                    </>
+                  ) : (
+                    !loadingEditions && '—'
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => remove(isbn)}
+                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity flex-shrink-0"
+                  title="Remove this ISBN"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function BookFormModal({ book, onSave, onClose, onDelete }: Props) {
@@ -63,7 +146,7 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
           if (result.coverUrl) setCoverUrl(result.coverUrl)
           if (result.workKey) {
             setFetchingIsbns(true)
-            const all = await fetchAllIsbns(result.workKey)
+            const all = await fetchAllIsbns(result.workKey, result.language)
             setIsbns(all.length > 0 ? all : [clean])
             setFetchingIsbns(false)
           } else {
@@ -90,7 +173,7 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
 
     if (result.workKey) {
       setFetchingIsbns(true)
-      const all = await fetchAllIsbns(result.workKey)
+      const all = await fetchAllIsbns(result.workKey, result.language)
       setIsbns(all.length > 0 ? all : result.isbn ? [result.isbn] : [])
       setFetchingIsbns(false)
     } else if (result.isbn) {
@@ -131,7 +214,7 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
       let newIsbns = isbns
       if (result.workKey) {
         setFetchingIsbns(true)
-        const all = await fetchAllIsbns(result.workKey)
+        const all = await fetchAllIsbns(result.workKey, result.language)
         if (all.length > 0) { setIsbns(all); newIsbns = all }
         setFetchingIsbns(false)
       }
@@ -295,14 +378,15 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
           {fetchingIsbns ? (
             <p className="text-xs text-slate-500">Fetching editions...</p>
           ) : refreshSummary ? (
-            <p className={`text-xs px-3 py-2 rounded-lg ${refreshSummary.startsWith('Nothing') ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+            <p className={`text-xs px-3 py-2 rounded-lg ${refreshSummary.startsWith('Nothing') || refreshSummary.startsWith('Not found') || refreshSummary.startsWith('ISBN not found') ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
               {refreshSummary}
             </p>
-          ) : isbns.length > 0 ? (
-            <p className="text-xs text-slate-600">
-              {isbns.length} edition{isbns.length !== 1 ? 's' : ''} — prices will be checked across all ISBNs
-            </p>
           ) : null}
+
+          {/* ISBN manager */}
+          {isbns.length > 0 && (
+            <IsbnManager isbns={isbns} onChange={setIsbns} book={book} />
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-2">

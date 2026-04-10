@@ -121,7 +121,10 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         if (!seller) try { seller = new URL(href).hostname.replace('www.', '') } catch {}
         const condMatch = rowText.match(/Condition:\s*([^\n€]+)/i) || rowText.match(/(Used\s*-\s*[\w ]+|New|Like New)/i)
         const condition = condMatch?.[1]?.trim()
-        results.push({ name: seller || 'BookFinder', price, currency: 'EUR', condition, url: href, source: 'bookfinder' })
+        const shipMatch = rowText.match(/shipping:\s*€([\d.,]+)/i)
+        const shipping = shipMatch ? parseFloat(shipMatch[1].replace(',', '.')) : undefined
+        const totalPrice = shipping !== undefined ? price + shipping : price
+        results.push({ name: seller || 'BookFinder', price, shipping, totalPrice, currency: 'EUR', condition, url: href, source: 'bookfinder' })
       })
       const seen = new Set<string>()
       return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true })

@@ -35,6 +35,7 @@ async function lookupIsbnOpenLibrary(clean: string): Promise<OpenLibraryResult |
       author = ad.name || ''
     }
     const coverId = (data.covers as number[])?.[0]
+    const lang = (data.languages as { key: string }[])?.[0]?.key?.replace('/languages/', '') || undefined
     return {
       title: data.title || '',
       author,
@@ -42,6 +43,7 @@ async function lookupIsbnOpenLibrary(clean: string): Promise<OpenLibraryResult |
       isbn: clean,
       pages: data.number_of_pages || undefined,
       workKey: (data.works as { key: string }[])?.[0]?.key || undefined,
+      language: lang,
       source: 'openlibrary',
     }
   } catch {
@@ -137,20 +139,52 @@ export async function lookupByIsbn(isbn: string): Promise<OpenLibraryResult | nu
   return olResult ?? gbResult
 }
 
-// ── Open Library editions (still the only source for multi-ISBN) ──────────────
+// ── Open Library editions ─────────────────────────────────────────────────────
 
-export async function fetchAllIsbns(workKey: string): Promise<string[]> {
+export interface Edition {
+  isbn: string
+  language?: string   // e.g. "eng", "ita", "fre"
+  format?: string     // e.g. "Paperback", "Hardcover", "Audio CD"
+  publisher?: string
+  year?: number
+}
+
+const AUDIO_FORMATS = /audio|cd|mp3|cassette|spoken/i
+
+export async function fetchEditions(workKey: string): Promise<Edition[]> {
   try {
     const res = await fetch(`https://openlibrary.org${workKey}/editions.json?limit=100`)
     if (!res.ok) return []
     const data = await res.json()
-    const isbns: string[] = []
+    const editions: Edition[] = []
     for (const entry of data.entries || []) {
-      if (entry.isbn_13) isbns.push(...(entry.isbn_13 as string[]))
-      if (entry.isbn_10) isbns.push(...(entry.isbn_10 as string[]))
+      const lang = (entry.languages as { key: string }[])?.[0]?.key?.replace('/languages/', '') || undefined
+      const format = entry.physical_format || undefined
+      const publisher = (entry.publishers as string[])?.[0] || undefined
+      const year = parseInt(entry.publish_date) || undefined
+      const isbns: string[] = [
+        ...((entry.isbn_13 as string[]) || []),
+        ...((entry.isbn_10 as string[]) || []),
+      ]
+      for (const isbn of isbns) {
+        editions.push({ isbn, language: lang, format, publisher, year })
+      }
     }
-    return [...new Set(isbns)]
+    return editions
   } catch {
     return []
   }
+}
+
+// Fetch ISBNs with auto-filtering: exclude audiobooks, optionally filter by language
+export async function fetchAllIsbns(workKey: string, preferredLanguage?: string): Promise<string[]> {
+  const editions = await fetchEditions(workKey)
+  const filtered = editions.filter(e => {
+    // Exclude audiobooks
+    if (e.format && AUDIO_FORMATS.test(e.format)) return false
+    // Filter by language if specified
+    if (preferredLanguage && e.language && e.language !== preferredLanguage) return false
+    return true
+  })
+  return [...new Set(filtered.map(e => e.isbn))]
 }

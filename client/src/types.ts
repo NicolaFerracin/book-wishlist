@@ -1,6 +1,8 @@
 export interface Seller {
   name: string
   price: number
+  shipping?: number
+  totalPrice?: number
   currency: string
   condition?: string
   location?: string
@@ -38,5 +40,6 @@ export interface OpenLibraryResult {
   pages?: number
   firstPublishYear?: number
   workKey?: string
+  language?: string  // e.g. "eng", "ita", "fre"
   source?: 'openlibrary' | 'googlebooks'
 }

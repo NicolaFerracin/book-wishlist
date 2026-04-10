@@ -7,6 +7,8 @@ interface Deal {
   isbn: string
   seller: string
   price: number
+  shipping?: number
+  totalPrice: number
   currency: string
   condition?: string
   location?: string
@@ -81,9 +83,16 @@ function DealRow({ deal, showBook = true }: { deal: Deal; showBook?: boolean }) 
           )}
         </p>
       </div>
-      <p className="text-sm font-semibold text-emerald-400 flex-shrink-0">
-        {fmtPrice(deal.price, deal.currency)}
-      </p>
+      <div className="flex-shrink-0 text-right">
+        <p className="text-sm font-semibold text-emerald-400">
+          {fmtPrice(deal.totalPrice, deal.currency)}
+        </p>
+        {deal.shipping != null && (
+          <p className="text-[9px] text-slate-600">
+            {fmtPrice(deal.price, deal.currency)} + {fmtPrice(deal.shipping, deal.currency)} ship
+          </p>
+        )}
+      </div>
       <svg className="w-3.5 h-3.5 text-slate-700 group-hover:text-slate-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
       </svg>
@@ -145,19 +154,21 @@ export default function DealsView({ books, excludeUS }: Props) {
       for (const pr of book.prices) {
         for (const s of pr.sellers) {
           if (excludeUS && isUSSeller(s)) continue
+          const tp = s.totalPrice ?? s.price
           const key = s.name
           const existing = seen.get(key)
-          if (!existing || s.price < existing.price) {
+          if (!existing || tp < existing.totalPrice) {
             seen.set(key, {
-              book, isbn: pr.isbn, seller: s.name, price: s.price,
-              currency: s.currency, condition: s.condition, location: s.location, url: s.url, source: s.source,
+              book, isbn: pr.isbn, seller: s.name, price: s.price, shipping: s.shipping,
+              totalPrice: tp, currency: s.currency, condition: s.condition,
+              location: s.location, url: s.url, source: s.source,
             })
           }
         }
       }
       all.push(...seen.values())
     }
-    return all.sort((a, b) => a.price - b.price)
+    return all.sort((a, b) => a.totalPrice - b.totalPrice)
   }, [books, excludeUS])
 
   const sellerGroups = useMemo(() => {
@@ -170,7 +181,7 @@ export default function DealsView({ books, excludeUS }: Props) {
         map.set(key, group)
       }
       group.deals.push(deal)
-      group.totalPrice += deal.price
+      group.totalPrice += deal.totalPrice
     }
     // Count unique books per seller
     for (const g of map.values()) {
@@ -178,8 +189,8 @@ export default function DealsView({ books, excludeUS }: Props) {
     }
     // Sort by cheapest single item (so the seller with the best deal shows first)
     return [...map.values()].sort((a, b) => {
-      const aMin = Math.min(...a.deals.map(d => d.price))
-      const bMin = Math.min(...b.deals.map(d => d.price))
+      const aMin = Math.min(...a.deals.map(d => d.totalPrice))
+      const bMin = Math.min(...b.deals.map(d => d.totalPrice))
       return aMin - bMin
     })
   }, [deals])

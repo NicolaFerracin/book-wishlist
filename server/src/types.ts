@@ -1,11 +1,13 @@
 export interface Seller {
   name: string
   price: number
+  shipping?: number   // shipping cost (same currency)
+  totalPrice?: number // price + shipping
   currency: string
   condition?: string
   location?: string
   url: string
-  source?: string  // 'abebooks' | 'amazon' | 'biblio'
+  source?: string
 }
 
 export interface PriceResult {

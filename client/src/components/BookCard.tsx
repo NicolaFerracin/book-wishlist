@@ -53,7 +53,8 @@ export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excl
   }, [book.prices, excludeUS])
 
   const allSellers = filteredPrices.flatMap((p) => p.sellers)
-  const cheapest = allSellers.length > 0 ? allSellers.reduce((a, b) => (a.price < b.price ? a : b)) : null
+  const effectivePrice = (s: typeof allSellers[0]) => s.totalPrice ?? s.price
+  const cheapest = allSellers.length > 0 ? allSellers.reduce((a, b) => (effectivePrice(a) < effectivePrice(b) ? a : b)) : null
 
   const handleScrape = async () => {
     setScraping(true)
@@ -98,7 +99,7 @@ export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excl
             )}
             {cheapest && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                from {formatPrice(cheapest.price, cheapest.currency)}
+                from {formatPrice(effectivePrice(cheapest), cheapest.currency)}
               </span>
             )}
           </div>
@@ -197,7 +198,12 @@ export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excl
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs font-semibold text-emerald-400">
-                            {formatPrice(seller.price, seller.currency)}
+                            {formatPrice(seller.totalPrice ?? seller.price, seller.currency)}
+                            {seller.shipping != null && (
+                              <span className="text-[9px] text-slate-600 font-normal ml-1">
+                                ({formatPrice(seller.price, seller.currency)} + {formatPrice(seller.shipping, seller.currency)} ship)
+                              </span>
+                            )}
                           </span>
                           <svg className="w-3 h-3 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
