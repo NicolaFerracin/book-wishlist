@@ -169,7 +169,15 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         }
         const shipping = shipVal
         const totalPrice = shipping !== undefined ? price + shipping : price
-        results.push({ name: seller || 'BookFinder', price, shipping, totalPrice, currency: 'EUR', condition, url: href, source: 'bookfinder' })
+        // Resolve affiliate redirect URLs to their actual destination
+        let resolvedHref = href
+        if (href.includes('affiliates.abebooks.com')) {
+          try {
+            const uParam = new URL(href).searchParams.get('u')
+            if (uParam) resolvedHref = uParam.startsWith('http') ? uParam : `https://${uParam}`
+          } catch {}
+        }
+        results.push({ name: seller || 'BookFinder', price, shipping, totalPrice, currency: 'EUR', condition, url: resolvedHref, source: 'bookfinder' })
       })
       const seen = new Set<string>()
       return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true })
