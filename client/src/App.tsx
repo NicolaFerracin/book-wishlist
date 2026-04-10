@@ -29,6 +29,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'cards' | 'deals'>('cards')
   const [expandPrices, setExpandPrices] = useState(false)
   const [excludeUS, setExcludeUS] = useState(false)
+  const [showNeedsAttention, setShowNeedsAttention] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -51,7 +52,11 @@ export default function App() {
 
   useEffect(() => { refresh() }, [refresh])
 
+  const needsAttention = (b: WishlistBook) => !b.isbn && b.isbns.length === 0 || !b.coverUrl
+  const needsAttentionCount = books.filter(needsAttention).length
+
   const filtered = books.filter((b) => {
+    if (showNeedsAttention && !needsAttention(b)) return false
     if (!search) return true
     const q = search.toLowerCase()
     return b.title.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q)
@@ -182,6 +187,14 @@ export default function App() {
             >
               {excludeUS ? 'US sellers excluded' : 'Exclude US sellers'}
             </button>
+            {needsAttentionCount > 0 && (
+              <button
+                onClick={() => setShowNeedsAttention(v => !v)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${showNeedsAttention ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' : 'text-slate-500 border-slate-800 hover:text-slate-300'}`}
+              >
+                {showNeedsAttention ? `Showing ${needsAttentionCount} needing attention` : `${needsAttentionCount} need attention`}
+              </button>
+            )}
           </div>
         )}
 

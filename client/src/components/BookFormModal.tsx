@@ -11,16 +11,30 @@ interface Props {
   onDelete?: () => Promise<void>
 }
 
+const AUDIO_RE = /audio|cd|mp3|cassette|spoken/i
+
+function EditionLabel({ ed }: { ed: Edition }) {
+  return (
+    <span className="text-[10px] text-slate-600 truncate">
+      {ed.language && <span className="uppercase">{ed.language}</span>}
+      {ed.format && <span> · {ed.format}</span>}
+      {ed.publisher && <span> · {ed.publisher}</span>}
+      {ed.year && <span> · {ed.year}</span>}
+    </span>
+  )
+}
+
 function IsbnManager({ isbns, onChange, book }: { isbns: string[]; onChange: (v: string[]) => void; book: WishlistBook | null }) {
   const [expanded, setExpanded] = useState(false)
-  const [editions, setEditions] = useState<Map<string, Edition>>(new Map())
+  const [allEditions, setAllEditions] = useState<Edition[]>([])
   const [loadingEditions, setLoadingEditions] = useState(false)
 
+  const selected = new Set(isbns)
+
   const loadEditionDetails = async () => {
-    if (editions.size > 0 || !book) return
+    if (allEditions.length > 0) return
     setLoadingEditions(true)
-    // Try to get the workKey from the primary ISBN
-    const primaryIsbn = book.isbn || isbns[0]
+    const primaryIsbn = book?.isbn || book?.asin || isbns[0]
     if (primaryIsbn) {
       try {
         const res = await fetch(`https://openlibrary.org/isbn/${primaryIsbn.replace(/[-\s]/g, '')}.json`)
@@ -29,9 +43,10 @@ function IsbnManager({ isbns, onChange, book }: { isbns: string[]; onChange: (v:
           const workKey = data.works?.[0]?.key
           if (workKey) {
             const eds = await fetchEditions(workKey)
-            const map = new Map<string, Edition>()
-            for (const e of eds) map.set(e.isbn, e)
-            setEditions(map)
+            // Deduplicate by ISBN, keep first occurrence
+            const seen = new Set<string>()
+            const unique = eds.filter(e => { if (seen.has(e.isbn)) return false; seen.add(e.isbn); return true })
+            setAllEditions(unique)
           }
         }
       } catch {}
@@ -44,50 +59,65 @@ function IsbnManager({ isbns, onChange, book }: { isbns: string[]; onChange: (v:
     setExpanded(v => !v)
   }
 
-  const remove = (isbn: string) => onChange(isbns.filter(i => i !== isbn))
+  const toggle = (isbn: string) => {
+    if (selected.has(isbn)) {
+      // Don't allow removing the last one
+      if (isbns.length <= 1) return
+      onChange(isbns.filter(i => i !== isbn))
+    } else {
+      onChange([...isbns, isbn])
+    }
+  }
+
+  // Partition: selected first, then unselected. Within each, sort by: same-language first, then no-audio first
+  const sortedEditions = allEditions.length > 0
+    ? [...allEditions].sort((a, b) => {
+        const aSelected = selected.has(a.isbn) ? 0 : 1
+        const bSelected = selected.has(b.isbn) ? 0 : 1
+        if (aSelected !== bSelected) return aSelected - bSelected
+        const aAudio = a.format && AUDIO_RE.test(a.format) ? 1 : 0
+        const bAudio = b.format && AUDIO_RE.test(b.format) ? 1 : 0
+        return aAudio - bAudio
+      })
+    : []
 
   return (
     <div className="bg-slate-800/30 rounded-xl px-3 py-2">
       <button type="button" onClick={handleExpand} className="flex items-center justify-between w-full text-xs text-slate-500 hover:text-slate-300 transition-colors">
-        <span>{isbns.length} edition{isbns.length !== 1 ? 's' : ''} — prices checked across all</span>
+        <span>{isbns.length} ISBN{isbns.length !== 1 ? 's' : ''} selected for price checking</span>
         <svg className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {expanded && (
-        <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-          {loadingEditions && <p className="text-[10px] text-slate-600 py-1">Loading edition details...</p>}
-          {isbns.map(isbn => {
-            const ed = editions.get(isbn)
+        <div className="mt-2 space-y-0.5 max-h-56 overflow-y-auto">
+          {loadingEditions && <p className="text-[10px] text-slate-600 py-2">Loading available editions...</p>}
+
+          {sortedEditions.length > 0 ? sortedEditions.map(ed => {
+            const isSelected = selected.has(ed.isbn)
+            const isAudio = ed.format && AUDIO_RE.test(ed.format)
             return (
-              <div key={isbn} className="flex items-center gap-2 py-1 group">
-                <span className="text-[11px] font-mono text-slate-400 w-28 flex-shrink-0">{isbn}</span>
-                <span className="text-[10px] text-slate-600 truncate flex-1">
-                  {ed ? (
-                    <>
-                      {ed.language && <span className="uppercase">{ed.language}</span>}
-                      {ed.format && <span> · {ed.format}</span>}
-                      {ed.publisher && <span> · {ed.publisher}</span>}
-                      {ed.year && <span> · {ed.year}</span>}
-                    </>
-                  ) : (
-                    !loadingEditions && '—'
-                  )}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => remove(isbn)}
-                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity flex-shrink-0"
-                  title="Remove this ISBN"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+              <label
+                key={ed.isbn}
+                className={`flex items-center gap-2 py-1.5 px-1 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-slate-800/60' : 'hover:bg-slate-800/30'} ${isAudio ? 'opacity-40' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggle(ed.isbn)}
+                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500/50 cursor-pointer flex-shrink-0"
+                />
+                <span className="text-[11px] font-mono text-slate-400 w-28 flex-shrink-0">{ed.isbn}</span>
+                <EditionLabel ed={ed} />
+              </label>
             )
-          })}
+          }) : !loadingEditions && isbns.map(isbn => (
+            <div key={isbn} className="flex items-center gap-2 py-1.5 px-1">
+              <input type="checkbox" checked disabled className="w-3.5 h-3.5 rounded flex-shrink-0" />
+              <span className="text-[11px] font-mono text-slate-400">{isbn}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -144,14 +174,8 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
           setAuthor(result.author)
           if (result.pages) setPages(String(result.pages))
           if (result.coverUrl) setCoverUrl(result.coverUrl)
-          if (result.workKey) {
-            setFetchingIsbns(true)
-            const all = await fetchAllIsbns(result.workKey, result.language)
-            setIsbns(all.length > 0 ? all : [clean])
-            setFetchingIsbns(false)
-          } else {
-            setIsbns([clean])
-          }
+          // Only select the primary ISBN by default — user can add more via the ISBN manager
+          setIsbns([clean])
         } else {
           // Not found anywhere — at least keep the ISBN itself for price checking
           setIsbns([clean])
@@ -171,12 +195,8 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
     setResults([])
     setShowResults(false)
 
-    if (result.workKey) {
-      setFetchingIsbns(true)
-      const all = await fetchAllIsbns(result.workKey, result.language)
-      setIsbns(all.length > 0 ? all : result.isbn ? [result.isbn] : [])
-      setFetchingIsbns(false)
-    } else if (result.isbn) {
+    // Only select the primary ISBN — user can add more via the ISBN manager
+    if (result.isbn) {
       setIsbns([result.isbn])
     }
   }
@@ -211,15 +231,11 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
       if (result.coverUrl && result.coverUrl !== coverUrl) { setCoverUrl(result.coverUrl); changes.push('cover') }
       if (result.isbn && result.isbn !== isbn) { setIsbn(result.isbn); changes.push('ISBN') }
 
-      let newIsbns = isbns
-      if (result.workKey) {
-        setFetchingIsbns(true)
-        const all = await fetchAllIsbns(result.workKey, result.language)
-        if (all.length > 0) { setIsbns(all); newIsbns = all }
-        setFetchingIsbns(false)
-      }
+      // Keep existing ISBNs (user-curated), just make sure primary is included
+      const newIsbns = result.isbn && !isbns.includes(result.isbn) ? [result.isbn, ...isbns] : isbns
+      setIsbns(newIsbns)
 
-      const isbnNote = `${newIsbns.length} edition${newIsbns.length !== 1 ? 's' : ''}`
+      const isbnNote = `${newIsbns.length} ISBN${newIsbns.length !== 1 ? 's' : ''} selected`
       setRefreshSummary(
         changes.length > 0
           ? `Updated: ${changes.join(', ')} · ${isbnNote}`

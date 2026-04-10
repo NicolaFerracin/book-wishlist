@@ -92,9 +92,13 @@ export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excl
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {book.pages && <span className="text-slate-600 text-[10px]">{book.pages}p</span>}
-            {book.isbns.length > 0 && (
+            {book.isbns.length > 0 ? (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 border border-slate-700">
-                {book.isbns.length} edition{book.isbns.length > 1 ? 's' : ''}
+                {book.isbns.length} ISBN{book.isbns.length > 1 ? 's' : ''}
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                no ISBN
               </span>
             )}
             {cheapest && (
