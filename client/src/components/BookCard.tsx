@@ -7,6 +7,7 @@ interface Props {
   book: WishlistBook
   onEdit: (book: WishlistBook) => void
   onUpdate: (book: WishlistBook) => void
+  onDelete: (id: string) => void
   forceShowPrices?: boolean
   excludeUS?: boolean
   scrapeQuery?: string
@@ -38,9 +39,10 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excludeUS, scrapeQuery }: Props) {
+export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPrices, excludeUS, scrapeQuery }: Props) {
   const [scraping, setScraping] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [localShowPrices, setLocalShowPrices] = useState(false)
   const showPrices = forceShowPrices || localShowPrices
 
@@ -113,12 +115,23 @@ export default function BookCard({ book, onEdit, onUpdate, forceShowPrices, excl
           )}
         </div>
 
-        {/* Edit button */}
-        <button onClick={() => onEdit(book)} className="flex-shrink-0 text-slate-600 hover:text-slate-300 transition-colors self-start mt-0.5">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </button>
+        {/* Edit + Delete buttons */}
+        <div className="flex flex-col gap-1.5 flex-shrink-0 self-start mt-0.5">
+          <button onClick={() => onEdit(book)} className="text-slate-600 hover:text-slate-300 transition-colors" title="Edit">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); if (confirmDelete) { onDelete(book.id); } else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000) } }}
+            className={`transition-colors ${confirmDelete ? 'text-red-400' : 'text-slate-700 hover:text-red-400'}`}
+            title={confirmDelete ? 'Click again to confirm' : 'Delete'}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Price section */}

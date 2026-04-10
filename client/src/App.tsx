@@ -225,6 +225,7 @@ export default function App() {
                 key={book.id}
                 book={book}
                 onEdit={(b) => { setEditingBook(b); setShowForm(true) }}
+                onDelete={async (id) => { await deleteBook(id); setBooks(prev => prev.filter(b => b.id !== id)) }}
                 onUpdate={handleUpdate}
                 forceShowPrices={expandPrices}
                 excludeUS={excludeUS}
