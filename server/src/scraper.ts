@@ -19,15 +19,19 @@ async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 // Parse European-formatted price: "1.911,50" → 1911.5, "12,95" → 12.95, "3.00" → 3.0
 function parseEurPrice(raw: string): number {
   let s = raw.trim()
-  // If has both dot and comma: dot is thousand sep, comma is decimal (e.g., "1.911,50")
+  // Both dot and comma: dot is thousand sep, comma is decimal (e.g., "1.911,50")
   if (s.includes('.') && s.includes(',')) {
     s = s.replace(/\./g, '').replace(',', '.')
   }
-  // If has dot followed by exactly 3 digits (and nothing after): thousand sep (e.g., "1.911")
+  // Dot followed by exactly 3 digits: thousand sep (e.g., "1.911")
   else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
     s = s.replace(/\./g, '')
   }
-  // If has comma: it's a decimal separator (e.g., "12,95")
+  // Comma followed by exactly 3 digits: thousand sep (e.g., "1,050")
+  else if (/^\d{1,3}(,\d{3})+$/.test(s)) {
+    s = s.replace(/,/g, '')
+  }
+  // Comma as decimal separator (e.g., "12,95")
   else if (s.includes(',')) {
     s = s.replace(',', '.')
   }
@@ -72,6 +76,7 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         let raw = m[1]
         if (raw.includes('.') && raw.includes(',')) { raw = raw.replace(/\./g, '').replace(',', '.') }
         else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) { raw = raw.replace(/\./g, '') }
+        else if (/^\d{1,3}(,\d{3})+$/.test(raw)) { raw = raw.replace(/,/g, '') }
         else if (raw.includes(',')) { raw = raw.replace(',', '.') }
         const price = parseFloat(raw)
         if (isNaN(price) || price <= 0) return
@@ -94,6 +99,7 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
           let sr = shipMatch[1]
           if (sr.includes('.') && sr.includes(',')) { sr = sr.replace(/\./g, '').replace(',', '.') }
           else if (/^\d{1,3}(\.\d{3})+$/.test(sr)) { sr = sr.replace(/\./g, '') }
+          else if (/^\d{1,3}(,\d{3})+$/.test(sr)) { sr = sr.replace(/,/g, '') }
           else if (sr.includes(',')) { sr = sr.replace(',', '.') }
           shipVal = parseFloat(sr)
         }
