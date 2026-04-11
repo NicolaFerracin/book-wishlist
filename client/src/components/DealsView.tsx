@@ -32,7 +32,6 @@ interface Props {
 const CUR: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' }
 
 const SOURCE_STYLES: Record<string, { bg: string; label: string }> = {
-  abebooks:   { bg: 'bg-blue-500/15 text-blue-400',   label: 'ABE' },
   bookfinder: { bg: 'bg-purple-500/15 text-purple-400', label: 'BF' },
 }
 

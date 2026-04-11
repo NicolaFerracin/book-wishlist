@@ -46,39 +46,6 @@ const DEFAULT_OPTIONS: ScrapeOptions = {
   country: 'pt',
 }
 
-// ── Source: AbeBooks (iberlibro.com — EUR) ────────────────────────────────────
-
-async function scrapeAbebooks(isbn: string, page: Page): Promise<Seller[]> {
-  const url = `https://www.iberlibro.com/servlet/SearchResults?isbn=${isbn}&sts=t&sortby=2`
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
-    await page.waitForSelector('li[data-test-id="listing-item"]', { timeout: 8_000 }).catch(() => {})
-    return await page.evaluate(() => {
-      const out: Seller[] = []
-      document.querySelectorAll('li[data-test-id="listing-item"]').forEach(li => {
-        const priceText = li.querySelector('p.item-price')?.textContent?.trim() ?? ''
-        const m = priceText.match(/([A-Z]{3})\s*([\d.,]+)/)
-        if (!m) return
-        let raw = m[2]
-        if (raw.includes('.') && raw.includes(',')) { raw = raw.replace(/\./g, '').replace(',', '.') }
-        else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) { raw = raw.replace(/\./g, '') }
-        else if (raw.includes(',')) { raw = raw.replace(',', '.') }
-        const price = parseFloat(raw)
-        if (isNaN(price) || price <= 0) return
-        const spans = li.querySelectorAll('.bookseller-info span')
-        const name = spans[0]?.textContent?.trim() || 'Unknown'
-        const location = spans[1]?.textContent?.trim()
-        const condition = li.querySelector('.opt-subcondition')?.textContent?.trim()
-        // Direct listing link: /BookTitle/ID/bd
-        const detailLink = li.querySelector('a[href$="/bd"]') as HTMLAnchorElement | null
-        const href = detailLink?.href || ''
-        if (href) out.push({ name, price, currency: m[1], condition, location, url: href, source: 'abebooks' })
-      })
-      return out
-    }) as Seller[]
-  } catch { return [] }
-}
-
 // ── Source: BookFinder (aggregator, configurable destination) ─────────────────
 
 // Amazon domains to exclude — too far for reasonable shipping to Europe
@@ -162,20 +129,16 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
 
 async function scrapeIsbn(isbn: string, opts: ScrapeOptions = DEFAULT_OPTIONS): Promise<Seller[]> {
   const b = await getBrowser()
-  const pages = await Promise.all([b.newPage(), b.newPage()])
+  const page = await b.newPage()
 
   try {
-    const [abeSellers, bfSellers] = await Promise.all([
-      scrapeAbebooks(isbn, pages[0]),
-      scrapeBookFinder(isbn, pages[1], opts),
-    ])
-    const all = [...abeSellers, ...bfSellers]
+    const all = await scrapeBookFinder(isbn, page, opts)
     return all.sort((a, b) => a.price - b.price)
   } catch (e) {
     // Error logged by caller
     return []
   } finally {
-    await Promise.all(pages.map(p => p.close()))
+    await page.close()
   }
 }
 
