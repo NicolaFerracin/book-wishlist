@@ -18,6 +18,11 @@ const DISTANT_PATTERNS = [
   /singapore/i,
 ]
 
+const DISTANT_DOMAINS = [
+  'valore.com',
+  'valorebooks.com',
+]
+
 export function isUSSeller(seller: Seller): boolean {
   const text = `${seller.location ?? ''} ${seller.name ?? ''}`
   return US_PATTERNS.some(p => p.test(text))
@@ -25,5 +30,7 @@ export function isUSSeller(seller: Seller): boolean {
 
 export function isDistantSeller(seller: Seller): boolean {
   const text = `${seller.location ?? ''} ${seller.name ?? ''}`
-  return DISTANT_PATTERNS.some(p => p.test(text))
+  if (DISTANT_PATTERNS.some(p => p.test(text))) return true
+  if (DISTANT_DOMAINS.some(d => (seller.url ?? '').includes(d))) return true
+  return false
 }
