@@ -1,4 +1,5 @@
 import { chromium, type Browser, type Page } from 'playwright'
+import { writeFileSync } from 'fs'
 import type { Seller, PriceResult } from './types.js'
 
 let browser: Browser | null = null
@@ -19,9 +20,15 @@ async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 // Parse European-formatted price: "1.911,50" → 1911.5, "12,95" → 12.95, "3.00" → 3.0
 function parseEurPrice(raw: string): number {
   let s = raw.trim()
-  // Both dot and comma: dot is thousand sep, comma is decimal (e.g., "1.911,50")
+  // Both dot and comma: figure out which is the thousand separator
   if (s.includes('.') && s.includes(',')) {
-    s = s.replace(/\./g, '').replace(',', '.')
+    if (s.indexOf(',') < s.indexOf('.')) {
+      // Comma before dot → English format: comma=thousand, dot=decimal (e.g., "1,055.91")
+      s = s.replace(/,/g, '')
+    } else {
+      // Dot before comma → European format: dot=thousand, comma=decimal (e.g., "1.055,91")
+      s = s.replace(/\./g, '').replace(',', '.')
+    }
   }
   // Dot followed by exactly 3 digits: thousand sep (e.g., "1.911")
   else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
@@ -62,7 +69,8 @@ function isExcludedDomain(url: string, opts: ScrapeOptions): boolean {
 }
 
 async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): Promise<Seller[]> {
-  const url = `https://www.bookfinder.com/isbn/${isbn}/?currency=${opts.currency}&destination=${opts.country}&mode=basic&st=sh&ac=qr`
+  const cleanIsbn = isbn.replace(/[-\s]/g, '')
+  const url = `https://www.bookfinder.com/isbn/${cleanIsbn}/?currency=${opts.currency}&destination=${opts.country}&mode=basic&st=sh&ac=qr`
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
     await new Promise(r => setTimeout(r, 2500))
@@ -74,7 +82,7 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         const m = text.match(/^€([\d.,]+)$/)
         if (!m || href.includes('bookfinder.com')) return
         let raw = m[1]
-        if (raw.includes('.') && raw.includes(',')) { raw = raw.replace(/\./g, '').replace(',', '.') }
+        if (raw.includes('.') && raw.includes(',')) { raw = raw.indexOf(',') < raw.indexOf('.') ? raw.replace(/,/g, '') : raw.replace(/\./g, '').replace(',', '.') }
         else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) { raw = raw.replace(/\./g, '') }
         else if (/^\d{1,3}(,\d{3})+$/.test(raw)) { raw = raw.replace(/,/g, '') }
         else if (raw.includes(',')) { raw = raw.replace(',', '.') }
@@ -97,7 +105,7 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         let shipVal: number | undefined
         if (shipMatch) {
           let sr = shipMatch[1]
-          if (sr.includes('.') && sr.includes(',')) { sr = sr.replace(/\./g, '').replace(',', '.') }
+          if (sr.includes('.') && sr.includes(',')) { sr = sr.indexOf(',') < sr.indexOf('.') ? sr.replace(/,/g, '') : sr.replace(/\./g, '').replace(',', '.') }
           else if (/^\d{1,3}(\.\d{3})+$/.test(sr)) { sr = sr.replace(/\./g, '') }
           else if (/^\d{1,3}(,\d{3})+$/.test(sr)) { sr = sr.replace(/,/g, '') }
           else if (sr.includes(',')) { sr = sr.replace(',', '.') }
@@ -127,6 +135,13 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
       const seen = new Set<string>()
       return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true })
     }) as Seller[]
+
+    // Debug: log raw scrape results to file
+    if (sellers.length > 0) {
+      const debugLine = `[${new Date().toISOString()}] ISBN:${cleanIsbn} → ${sellers.length} sellers, cheapest: €${sellers[0]?.price} (${sellers[0]?.name})\n`
+      try { writeFileSync('data/scrape-debug.log', debugLine, { flag: 'a' }) } catch {}
+    }
+
     return sellers.filter(s => !isExcludedDomain(s.url, opts))
   } catch { return [] }
 }
