@@ -7,7 +7,7 @@ A local tool for tracking books you want to buy and finding the cheapest second-
 - **Book wishlist** — track books you want to read/buy, with cover images, ISBNs, and notes
 - **Amazon import** — import wishlists using the [Amazon Wishlist Exporter](https://chromewebstore.google.com/detail/amazon-wishlist-exporter/jggmpdkkdepkhdbmfplkabhjkahgnoip) Chrome extension (JSON)
 - **Goodreads import** — import your to-read shelf from a Goodreads CSV export
-- **Multi-source price checking** — scrapes AbeBooks, Amazon, and BookFinder in parallel using Playwright
+- **Multi-source price checking** — scrapes AbeBooks and BookFinder in parallel using Playwright
 - **Multi-edition ISBN lookup** — fetches all known ISBNs for a book via Open Library, checks prices across editions to find the cheapest
 - **Deals view** — flat list of all offers sorted by price, or grouped by seller to consolidate orders and save on shipping
 - **Region selector** — configurable Amazon domain and shipping destination (Portugal, Spain, Italy, Germany, France, UK)
@@ -47,10 +47,9 @@ data/            → wishlist.json + logs.json (local, gitignored)
 | Source | What it checks | Notes |
 |--------|---------------|-------|
 | AbeBooks (iberlibro.com) | Used books, EUR prices | Largest second-hand book marketplace |
-| Amazon (configurable domain) | New + marketplace used | Domain set via region selector |
-| BookFinder | Aggregator (Biblio, ThriftBooks, Alibris, etc.) | Destination country set via region selector |
+| BookFinder | Aggregator (Amazon, Biblio, ThriftBooks, Alibris, etc.) | Destination country set via region selector |
 
-All three sources are scraped **in parallel** for each ISBN using Playwright (headless Chromium). The scraper runs server-side so you can close the browser tab while it works.
+Both sources are scraped **in parallel** for each ISBN using Playwright (headless Chromium). BookFinder aggregates from Amazon and many other stores, so Amazon prices are still included. The scraper runs server-side so you can close the browser tab while it works.
 
 ## Commands
 

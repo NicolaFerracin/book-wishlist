@@ -15,7 +15,6 @@ interface Props {
 
 const SOURCE_STYLES: Record<string, { bg: string; label: string }> = {
   abebooks:   { bg: 'bg-blue-500/15 text-blue-400',   label: 'ABE' },
-  amazon:     { bg: 'bg-orange-500/15 text-orange-400', label: 'AMZ' },
   bookfinder: { bg: 'bg-purple-500/15 text-purple-400', label: 'BF' },
 }
 

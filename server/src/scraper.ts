@@ -79,43 +79,6 @@ async function scrapeAbebooks(isbn: string, page: Page): Promise<Seller[]> {
   } catch { return [] }
 }
 
-// ── Source: Amazon (configurable domain) ─────────────────────────────────────
-
-async function scrapeAmazon(isbn: string, page: Page, opts: ScrapeOptions): Promise<Seller[]> {
-  const domain = opts.amazonDomain
-  const url = `https://www.${domain}/s?k=${isbn}&i=stripbooks`
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
-    await page.waitForSelector('[data-component-type="s-search-result"]', { timeout: 8_000 }).catch(() => {})
-    return await page.evaluate(({ domain, currency }) => {
-      const out: { name: string; price: number; currency: string; condition?: string; url: string; source: string }[] = []
-      document.querySelectorAll('[data-component-type="s-search-result"]').forEach(card => {
-        const cardText = card.textContent?.toLowerCase() ?? ''
-        // Skip Kindle, ebook, audiobook, and audible results
-        if (/kindle|ebook|e-book|audible|audiobook|audio cd|formato digital/.test(cardText)) {
-          // Check if it also has a physical format — if not, skip entirely
-          if (!/paperback|hardcover|tapa blanda|tapa dura|pasta blanda/.test(cardText)) return
-        }
-        // Skip links to Kindle ASINs (dp/B...)
-        const linkEl = card.querySelector('a.a-link-normal[href*="/dp/"]') as HTMLAnchorElement | null
-        const rawHref = linkEl?.getAttribute('href') ?? ''
-        if (/\/dp\/B[A-Z0-9]{9}/.test(rawHref)) return
-
-        const wholeEl = card.querySelector('.a-price .a-price-whole')
-        const fracEl = card.querySelector('.a-price .a-price-fraction')
-        if (!wholeEl) return
-        const whole = wholeEl.textContent?.replace(/[.,\s]/g, '') ?? '0'
-        const frac = fracEl?.textContent?.trim() ?? '00'
-        const price = parseFloat(`${whole}.${frac}`)
-        if (isNaN(price) || price <= 0) return
-        const href = linkEl ? `https://www.${domain}${rawHref}` : ''
-        out.push({ name: domain, price, currency, condition: 'New', url: href, source: 'amazon' })
-      })
-      return out.slice(0, 5)
-    }, { domain, currency: opts.currency }) as Seller[]
-  } catch { return [] }
-}
-
 // ── Source: BookFinder (aggregator, configurable destination) ─────────────────
 
 // Amazon domains to exclude — too far for reasonable shipping to Europe
@@ -199,15 +162,14 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
 
 async function scrapeIsbn(isbn: string, opts: ScrapeOptions = DEFAULT_OPTIONS): Promise<Seller[]> {
   const b = await getBrowser()
-  const pages = await Promise.all([b.newPage(), b.newPage(), b.newPage()])
+  const pages = await Promise.all([b.newPage(), b.newPage()])
 
   try {
-    const [abeSellers, amzSellers, bfSellers] = await Promise.all([
+    const [abeSellers, bfSellers] = await Promise.all([
       scrapeAbebooks(isbn, pages[0]),
-      scrapeAmazon(isbn, pages[1], opts),
-      scrapeBookFinder(isbn, pages[2], opts),
+      scrapeBookFinder(isbn, pages[1], opts),
     ])
-    const all = [...abeSellers, ...amzSellers, ...bfSellers]
+    const all = [...abeSellers, ...bfSellers]
     return all.sort((a, b) => a.price - b.price)
   } catch (e) {
     // Error logged by caller

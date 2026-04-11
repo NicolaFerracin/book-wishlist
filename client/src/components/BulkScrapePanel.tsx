@@ -125,7 +125,7 @@ export default function BulkScrapePanel({ onDone, scrapeQuery = '', onStarted }:
               <div>
                 <h2 className="text-lg font-semibold text-white">Bulk Price Check</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Checks AbeBooks, Amazon.es and BookFinder for all books with ISBNs
+                  Checks AbeBooks and BookFinder for all books with ISBNs
                 </p>
               </div>
               <button onClick={() => setOpen(false)} className="text-slate-500 hover:text-white transition-colors">
