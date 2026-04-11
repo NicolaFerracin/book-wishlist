@@ -29,6 +29,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'cards' | 'deals'>('cards')
   const [expandPrices, setExpandPrices] = useState(false)
   const [excludeUS, setExcludeUS] = useState(false)
+  const [excludeDistant, setExcludeDistant] = useState(false)
   const [showNeedsAttention, setShowNeedsAttention] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
@@ -187,6 +188,12 @@ export default function App() {
             >
               {excludeUS ? 'US sellers excluded' : 'Exclude US sellers'}
             </button>
+            <button
+              onClick={() => setExcludeDistant(v => !v)}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${excludeDistant ? 'bg-red-500/15 text-red-400 border-red-500/20' : 'text-slate-500 border-slate-800 hover:text-slate-300'}`}
+            >
+              {excludeDistant ? 'Distant excluded' : 'Exclude distant'}
+            </button>
             {needsAttentionCount > 0 && (
               <button
                 onClick={() => setShowNeedsAttention(v => !v)}
@@ -217,7 +224,7 @@ export default function App() {
         ) : filtered.length === 0 ? (
           <p className="text-center text-slate-600 py-12">No books match "{search}"</p>
         ) : viewMode === 'deals' ? (
-          <DealsView books={filtered} excludeUS={excludeUS} />
+          <DealsView books={filtered} excludeUS={excludeUS} excludeDistant={excludeDistant} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {filtered.map((book) => (
@@ -229,6 +236,7 @@ export default function App() {
                 onUpdate={handleUpdate}
                 forceShowPrices={expandPrices}
                 excludeUS={excludeUS}
+                excludeDistant={excludeDistant}
                 scrapeQuery={scrapeQuery}
               />
             ))}

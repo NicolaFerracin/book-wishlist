@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { scrapeBookPrices } from '../lib/api'
-import { isUSSeller } from '../lib/filters'
+import { isUSSeller, isDistantSeller } from '../lib/filters'
 import type { WishlistBook } from '../types'
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   onDelete: (id: string) => void
   forceShowPrices?: boolean
   excludeUS?: boolean
+  excludeDistant?: boolean
   scrapeQuery?: string
 }
 
@@ -37,7 +38,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPrices, excludeUS, scrapeQuery }: Props) {
+export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPrices, excludeUS, excludeDistant, scrapeQuery }: Props) {
   const [scraping, setScraping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -45,12 +46,14 @@ export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPr
   const showPrices = forceShowPrices || localShowPrices
 
   const filteredPrices = useMemo(() => {
-    if (!excludeUS) return book.prices
+    if (!excludeUS && !excludeDistant) return book.prices
     return book.prices.map(pr => ({
       ...pr,
-      sellers: pr.sellers.filter(s => !isUSSeller(s)),
+      sellers: pr.sellers.filter(s =>
+        !(excludeUS && isUSSeller(s)) && !(excludeDistant && isDistantSeller(s))
+      ),
     }))
-  }, [book.prices, excludeUS])
+  }, [book.prices, excludeUS, excludeDistant])
 
   const allSellers = filteredPrices.flatMap((p) => p.sellers)
   const effectivePrice = (s: typeof allSellers[0]) => s.totalPrice ?? s.price

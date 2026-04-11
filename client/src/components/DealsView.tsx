@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react'
 import type { WishlistBook } from '../types'
-import { isUSSeller } from '../lib/filters'
+import { isUSSeller, isDistantSeller } from '../lib/filters'
 
 interface Deal {
   book: WishlistBook
@@ -27,6 +27,7 @@ interface SellerGroup {
 interface Props {
   books: WishlistBook[]
   excludeUS?: boolean
+  excludeDistant?: boolean
 }
 
 const CUR: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' }
@@ -143,7 +144,7 @@ function SellerGroupCard({ group }: { group: SellerGroup }) {
 
 const PAGE_SIZE = 50
 
-export default function DealsView({ books, excludeUS }: Props) {
+export default function DealsView({ books, excludeUS, excludeDistant }: Props) {
   const [groupBy, setGroupBy] = useState<'price' | 'seller'>('price')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [visibleSellers, setVisibleSellers] = useState(20)
@@ -156,6 +157,7 @@ export default function DealsView({ books, excludeUS }: Props) {
       for (const pr of book.prices) {
         for (const s of pr.sellers) {
           if (excludeUS && isUSSeller(s)) continue
+          if (excludeDistant && isDistantSeller(s)) continue
           const tp = s.totalPrice ?? s.price
           const key = s.name
           const existing = seen.get(key)
