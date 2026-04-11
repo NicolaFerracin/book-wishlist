@@ -141,8 +141,12 @@ function SellerGroupCard({ group }: { group: SellerGroup }) {
   )
 }
 
+const PAGE_SIZE = 50
+
 export default function DealsView({ books, excludeUS }: Props) {
   const [groupBy, setGroupBy] = useState<'price' | 'seller'>('price')
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [visibleSellers, setVisibleSellers] = useState(20)
 
   const deals = useMemo(() => {
     const all: Deal[] = []
@@ -212,13 +216,13 @@ export default function DealsView({ books, excludeUS }: Props) {
         </p>
         <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
           <button
-            onClick={() => setGroupBy('price')}
+            onClick={() => { setGroupBy('price'); setVisibleCount(PAGE_SIZE) }}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${groupBy === 'price' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}
           >
             By price
           </button>
           <button
-            onClick={() => setGroupBy('seller')}
+            onClick={() => { setGroupBy('seller'); setVisibleSellers(20) }}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${groupBy === 'seller' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}
           >
             By seller
@@ -229,16 +233,32 @@ export default function DealsView({ books, excludeUS }: Props) {
       {groupBy === 'price' ? (
         /* ── Flat list sorted by price ─────────────────────────────────────── */
         <div className="space-y-1">
-          {deals.map((deal, i) => (
+          {deals.slice(0, visibleCount).map((deal, i) => (
             <DealRow key={`${deal.book.id}-${deal.isbn}-${deal.seller}-${i}`} deal={deal} />
           ))}
+          {visibleCount < deals.length && (
+            <button
+              onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+              className="w-full py-3 text-sm text-slate-500 hover:text-slate-300 transition-colors text-center rounded-xl hover:bg-slate-900"
+            >
+              Show more ({Math.min(PAGE_SIZE, deals.length - visibleCount)} of {deals.length - visibleCount} remaining)
+            </button>
+          )}
         </div>
       ) : (
         /* ── Grouped by seller ────────────────────────────────────────────── */
         <div className="space-y-6">
-          {sellerGroups.map((group) => (
+          {sellerGroups.slice(0, visibleSellers).map((group) => (
             <SellerGroupCard key={group.seller} group={group} />
           ))}
+          {visibleSellers < sellerGroups.length && (
+            <button
+              onClick={() => setVisibleSellers(v => v + 20)}
+              className="w-full py-3 text-sm text-slate-500 hover:text-slate-300 transition-colors text-center rounded-xl hover:bg-slate-900"
+            >
+              Show more sellers ({sellerGroups.length - visibleSellers} remaining)
+            </button>
+          )}
         </div>
       )}
     </div>
