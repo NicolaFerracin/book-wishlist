@@ -1,6 +1,6 @@
 import { chromium, type Browser, type Page } from 'playwright'
-import { writeFileSync } from 'fs'
 import type { Seller, PriceResult } from './types.js'
+import { parsePrice } from './parsePrice.js'
 
 let browser: Browser | null = null
 
@@ -17,38 +17,10 @@ export async function closeBrowser() {
 
 async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
-// Parse European-formatted price: "1.911,50" → 1911.5, "12,95" → 12.95, "3.00" → 3.0
-function parseEurPrice(raw: string): number {
-  let s = raw.trim()
-  // Both dot and comma: figure out which is the thousand separator
-  if (s.includes('.') && s.includes(',')) {
-    if (s.indexOf(',') < s.indexOf('.')) {
-      // Comma before dot → English format: comma=thousand, dot=decimal (e.g., "1,055.91")
-      s = s.replace(/,/g, '')
-    } else {
-      // Dot before comma → European format: dot=thousand, comma=decimal (e.g., "1.055,91")
-      s = s.replace(/\./g, '').replace(',', '.')
-    }
-  }
-  // Dot followed by exactly 3 digits: thousand sep (e.g., "1.911")
-  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
-    s = s.replace(/\./g, '')
-  }
-  // Comma followed by exactly 3 digits: thousand sep (e.g., "1,050")
-  else if (/^\d{1,3}(,\d{3})+$/.test(s)) {
-    s = s.replace(/,/g, '')
-  }
-  // Comma as decimal separator (e.g., "12,95")
-  else if (s.includes(',')) {
-    s = s.replace(',', '.')
-  }
-  return parseFloat(s)
-}
-
 export interface ScrapeOptions {
-  amazonDomain: string   // e.g. "amazon.es", "amazon.it", "amazon.de"
-  currency: string       // e.g. "EUR", "GBP"
-  country: string        // BookFinder destination: "pt", "it", "de", "gb"
+  amazonDomain: string
+  currency: string
+  country: string
 }
 
 const DEFAULT_OPTIONS: ScrapeOptions = {
@@ -57,16 +29,14 @@ const DEFAULT_OPTIONS: ScrapeOptions = {
   country: 'pt',
 }
 
-// ── Source: BookFinder (aggregator, configurable destination) ─────────────────
-
-// Amazon domains to exclude — too far for reasonable shipping to Europe
 function isExcludedDomain(url: string, opts: ScrapeOptions): boolean {
-  // If it's an Amazon link, only allow the user's selected domain
   if (url.includes('amazon.')) {
     return !url.includes(opts.amazonDomain)
   }
   return false
 }
+
+// ── Source: BookFinder (aggregator) ───────────────────────────────────────────
 
 async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): Promise<Seller[]> {
   const cleanIsbn = isbn.replace(/[-\s]/g, '')
@@ -74,22 +44,17 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
     await new Promise(r => setTimeout(r, 2500))
-    return await page.evaluate(() => {
-      const results: Seller[] = []
+
+    // Extract raw text from the page — parsing happens server-side with parsePrice
+    const rawResults = await page.evaluate(() => {
+      const results: { priceText: string; shippingText?: string; seller: string; condition?: string; url: string }[] = []
       document.querySelectorAll('a[href]').forEach(a => {
         const href = a.getAttribute('href') || ''
         const text = a.textContent?.trim() || ''
         const m = text.match(/^€([\d.,]+)$/)
         if (!m || href.includes('bookfinder.com')) return
-        let raw = m[1]
-        if (raw.includes('.') && raw.includes(',')) { raw = raw.indexOf(',') < raw.indexOf('.') ? raw.replace(/,/g, '') : raw.replace(/\./g, '').replace(',', '.') }
-        else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) { raw = raw.replace(/\./g, '') }
-        else if (/^\d{1,3}(,\d{3})+$/.test(raw)) { raw = raw.replace(/,/g, '') }
-        else if (raw.includes(',')) { raw = raw.replace(',', '.') }
-        const price = parseFloat(raw)
-        if (isNaN(price) || price <= 0) return
 
-        // Walk up to find row and extract metadata
+        // Walk up to find row
         let row = a.parentElement
         for (let i = 0; i < 5 && row; i++) {
           if (row.children.length > 3) break
@@ -102,61 +67,67 @@ async function scrapeBookFinder(isbn: string, page: Page, opts: ScrapeOptions): 
         const condMatch = rowText.match(/Condition:\s*([^\n€]+)/i) || rowText.match(/(Used\s*-\s*[\w ]+|New|Like New)/i)
         const condition = condMatch?.[1]?.trim()
         const shipMatch = rowText.match(/shipping:\s*€([\d.,]+)/i)
-        let shipVal: number | undefined
-        if (shipMatch) {
-          let sr = shipMatch[1]
-          if (sr.includes('.') && sr.includes(',')) { sr = sr.indexOf(',') < sr.indexOf('.') ? sr.replace(/,/g, '') : sr.replace(/\./g, '').replace(',', '.') }
-          else if (/^\d{1,3}(\.\d{3})+$/.test(sr)) { sr = sr.replace(/\./g, '') }
-          else if (/^\d{1,3}(,\d{3})+$/.test(sr)) { sr = sr.replace(/,/g, '') }
-          else if (sr.includes(',')) { sr = sr.replace(',', '.') }
-          shipVal = parseFloat(sr)
-        }
-        const shipping = shipVal
-        const totalPrice = shipping !== undefined ? price + shipping : price
-        // Clean up URLs
+
+        // Resolve affiliate URLs
         let resolvedHref = href
-        // Resolve affiliate redirects
         if (href.includes('affiliates.abebooks.com')) {
           try {
             const uParam = new URL(href).searchParams.get('u')
             if (uParam) resolvedHref = uParam.startsWith('http') ? uParam : `https://${uParam}`
           } catch {}
         }
-        // ShopBasket (add-to-cart) → BookDetailsPL (view page)
+        // ShopBasket → BookDetailsPL
         const basketMatch = resolvedHref.match(/\/servlet\/ShopBasket.*?[?&]ik=(\d+)/)
         if (basketMatch) {
-          const domain = resolvedHref.includes('zvab.com') ? 'www.iberlibro.com' : new URL(resolvedHref).hostname
+          const domain = resolvedHref.includes('zvab.com') ? 'www.iberlibro.com' : (() => { try { return new URL(resolvedHref).hostname } catch { return 'www.iberlibro.com' } })()
           resolvedHref = `https://${domain}/servlet/BookDetailsPL?bi=${basketMatch[1]}`
         }
-        // Normalize zvab.com → iberlibro.com
         resolvedHref = resolvedHref.replace(/zvab\.com/g, 'iberlibro.com')
-        results.push({ name: seller || 'BookFinder', price, shipping, totalPrice, currency: 'EUR', condition, url: resolvedHref, source: 'bookfinder' })
+
+        results.push({
+          priceText: m[1],
+          shippingText: shipMatch?.[1],
+          seller: seller || 'BookFinder',
+          condition,
+          url: resolvedHref,
+        })
       })
+      // Deduplicate by URL
       const seen = new Set<string>()
       return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true })
-    }) as Seller[]
+    })
 
-    // Debug: log raw scrape results to file
-    if (sellers.length > 0) {
-      const debugLine = `[${new Date().toISOString()}] ISBN:${cleanIsbn} → ${sellers.length} sellers, cheapest: €${sellers[0]?.price} (${sellers[0]?.name})\n`
-      try { writeFileSync('data/scrape-debug.log', debugLine, { flag: 'a' }) } catch {}
-    }
+    // Parse prices server-side with the proper parser
+    const sellers: Seller[] = rawResults.map(r => {
+      const price = parsePrice(r.priceText)
+      const shipping = r.shippingText ? parsePrice(r.shippingText) : undefined
+      const totalPrice = shipping !== undefined ? price + shipping : price
+      return {
+        name: r.seller,
+        price,
+        shipping,
+        totalPrice,
+        currency: 'EUR',
+        condition: r.condition,
+        url: r.url,
+        source: 'bookfinder' as const,
+      }
+    }).filter(s => !isNaN(s.price) && s.price > 0)
 
-    return sellers.filter(s => !isExcludedDomain(s.url, opts))
+    return sellers
+      .filter(s => !isExcludedDomain(s.url, opts))
+      .sort((a, b) => (a.totalPrice ?? a.price) - (b.totalPrice ?? b.price))
   } catch { return [] }
 }
 
-// ── Scrape one ISBN across all sources in parallel ───────────────────────────
+// ── Scrape one ISBN ──────────────────────────────────────────────────────────
 
 async function scrapeIsbn(isbn: string, opts: ScrapeOptions = DEFAULT_OPTIONS): Promise<Seller[]> {
   const b = await getBrowser()
   const page = await b.newPage()
-
   try {
-    const all = await scrapeBookFinder(isbn, page, opts)
-    return all.sort((a, b) => a.price - b.price)
+    return await scrapeBookFinder(isbn, page, opts)
   } catch (e) {
-    // Error logged by caller
     return []
   } finally {
     await page.close()
@@ -171,14 +142,11 @@ export async function scrapeBook(
   maxAttempts = 8,
   concurrency = 2,
 ): Promise<PriceResult[]> {
-  // Prioritize the user's specific ISBN/ASIN first (the edition they actually want),
-  // then try a few other edition ISBNs. This avoids checking unrelated language editions.
   const primary = [book.isbn, book.asin].filter(Boolean) as string[]
   const others = book.isbns.filter(i => !primary.includes(i))
   const candidates = [...new Set([...primary, ...others])]
   if (candidates.length === 0) return []
 
-  // Check primary ISBNs + a limited number of others
   const toCheck = candidates.slice(0, maxAttempts)
   const results: PriceResult[] = []
 
