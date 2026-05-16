@@ -244,7 +244,7 @@ function DoneStep({ added, skipped, onClose, onImported }: { added: number; skip
 }
 
 function UploadArea({ fileRef, accept, multiple, onFiles, error }: {
-  fileRef: React.RefObject<HTMLInputElement | null>
+  fileRef: React.MutableRefObject<HTMLInputElement | null>
   accept: string
   multiple: boolean
   onFiles: (files: FileList | null) => void
@@ -262,7 +262,7 @@ function UploadArea({ fileRef, accept, multiple, onFiles, error }: {
         <p className="text-sm text-slate-500">Click to upload {accept} file{multiple ? 's' : ''}</p>
       </div>
       <input
-        ref={fileRef}
+        ref={(el) => { fileRef.current = el }}
         type="file"
         accept={accept}
         multiple={multiple}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { searchBooks, lookupByIsbn, fetchAllIsbns, fetchEditions, type Edition } from '../lib/openLibrary'
+import { searchBooks, lookupByIsbn, fetchEditions, type Edition } from '../lib/openLibrary'
 import type { WishlistBook, OpenLibraryResult } from '../types'
 
 type BookInput = Omit<WishlistBook, 'id' | 'addedAt' | 'prices'>
@@ -134,7 +134,7 @@ export default function BookFormModal({ book, onSave, onClose, onDelete }: Props
   const [isbns, setIsbns] = useState<string[]>(book?.isbns || [])
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [fetchingIsbns, setFetchingIsbns] = useState(false)
+  const fetchingIsbns = false
   const [refreshing, setRefreshing] = useState(false)
   const [refreshSummary, setRefreshSummary] = useState<string | null>(null)
 

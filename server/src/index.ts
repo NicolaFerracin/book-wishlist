@@ -1,49 +1,19 @@
 import express from 'express'
 import cors from 'cors'
+import { existsSync } from 'fs'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { readBooks, writeBooks } from './storage.js'
-import { scrapeAllIsbns, scrapeBook, closeBrowser, type ScrapeOptions } from './scraper.js'
 import { log, getLogs, clearLogs } from './logger.js'
-
-function parseScrapeOptions(query: Record<string, unknown>): ScrapeOptions {
-  return {
-    amazonDomain: (query.amazonDomain as string) || 'amazon.es',  // closest Amazon to Portugal
-    currency: (query.currency as string) || 'EUR',
-    country: (query.country as string) || 'pt',                 // BookFinder ship-to destination
-  }
-}
 import type { WishlistBook } from './types.js'
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
-const PORT = 3001
-
-// ── Bulk scrape state (persists across client reconnects) ─────────────────────
-
-interface BulkScrapeState {
-  running: boolean
-  current: number
-  total: number
-  currentTitle: string
-  startedAt: string
-  bookStartedAt: string
-  log: { title: string; sellers: number; cheapest: { price: number; currency: string } | null; error?: string }[]
-  errors: number
-}
-
-const scrapeState: BulkScrapeState = {
-  running: false,
-  current: 0,
-  total: 0,
-  currentTitle: '',
-  startedAt: '',
-  bookStartedAt: '',
-  log: [],
-  errors: 0,
-}
-
-let scrapeAborted = false
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const PORT = Number(process.env.PORT || 3001)
+const HOST = process.env.HOST || '0.0.0.0'
 
 // ── Books CRUD ────────────────────────────────────────────────────────────────
 
@@ -79,6 +49,20 @@ app.delete('/api/books/:id', (req, res) => {
   const filtered = books.filter((b) => b.id !== req.params.id)
   writeBooks(filtered)
   res.json({ ok: true })
+})
+
+app.put('/api/books/:id/prices', (req, res) => {
+  const books = readBooks()
+  const idx = books.findIndex((b) => b.id === req.params.id)
+  if (idx === -1) return res.status(404).json({ error: 'Not found' })
+
+  const { prices, pricesLastChecked } = req.body as Pick<WishlistBook, 'prices' | 'pricesLastChecked'>
+  if (!Array.isArray(prices)) return res.status(400).json({ error: 'Invalid prices payload' })
+
+  books[idx].prices = prices
+  books[idx].pricesLastChecked = pricesLastChecked || new Date().toISOString()
+  writeBooks(books)
+  res.json(books[idx])
 })
 
 // ── Import ───────────────────────────────────────────────────────────────────
@@ -463,132 +447,6 @@ app.post('/api/cleanup-isbns', (_req, res) => {
   })()
 })
 
-// ── Price scraping ────────────────────────────────────────────────────────────
-
-app.post('/api/books/:id/scrape', async (req, res) => {
-  const books = readBooks()
-  const book = books.find((b) => b.id === req.params.id)
-  if (!book) return res.status(404).json({ error: 'Not found' })
-
-  if (book.isbns.length === 0 && !book.isbn && !book.asin) {
-    return res.status(400).json({ error: 'No ISBNs available for this book' })
-  }
-
-  const opts = parseScrapeOptions(req.query)
-  console.log(`Scraping prices for "${book.title}" (${opts.amazonDomain})...`)
-  const prices = await scrapeBook(book, opts)
-
-  const idx = books.findIndex((b) => b.id === req.params.id)
-  books[idx].prices = prices
-  books[idx].pricesLastChecked = new Date().toISOString()
-  writeBooks(books)
-
-  res.json(books[idx])
-})
-
-// ── Bulk price scraping (background job + polling) ───────────────────────────
-// POST /api/scrape-all         → start a run (or ?force=1 to re-scrape all)
-// GET  /api/scrape-all/status  → poll current progress (survives page refresh)
-
-app.get('/api/scrape-all/status', (_req, res) => {
-  res.json(scrapeState)
-})
-
-app.post('/api/scrape-all/stop', (_req, res) => {
-  if (!scrapeState.running) return res.json({ ok: false, message: 'Not running' })
-  scrapeAborted = true
-  res.json({ ok: true })
-})
-
-app.post('/api/scrape-all', (req, res) => {
-  if (scrapeState.running) {
-    return res.status(409).json({ error: 'Already running' })
-  }
-
-  const force = req.query.force === '1'
-  const opts = parseScrapeOptions(req.query)
-  const books = readBooks()
-  const toScrape = books.filter((b) => {
-    if (b.isbns.length === 0 && !b.isbn && !b.asin) return false
-    if (!force && b.pricesLastChecked) return false
-    return true
-  })
-
-  if (toScrape.length === 0) {
-    return res.json({ started: false, message: 'Nothing to scrape. Use ?force=1 to re-scrape all.' })
-  }
-
-  scrapeState.running = true
-  scrapeState.current = 0
-  scrapeState.total = toScrape.length
-  scrapeState.currentTitle = toScrape[0].title
-  scrapeState.startedAt = new Date().toISOString()
-  scrapeState.bookStartedAt = new Date().toISOString()
-  scrapeState.log = []
-  scrapeState.errors = 0
-
-  scrapeAborted = false
-  res.json({ started: true, total: toScrape.length })
-
-  // Run in background — not awaited
-  ;(async () => {
-    try {
-      for (let i = 0; i < toScrape.length; i++) {
-        if (scrapeAborted) { console.log('Bulk scrape stopped by user.'); break }
-        const book = toScrape[i]
-        scrapeState.current = i
-        scrapeState.currentTitle = book.title
-        scrapeState.bookStartedAt = new Date().toISOString()
-
-        let error: string | undefined
-        let totalSellers = 0
-        let cheapest: { price: number; currency: string } | null = null
-
-        try {
-          const prices = await scrapeBook(book, opts)
-          totalSellers = prices.reduce((s, p) => s + p.sellers.length, 0)
-          const cheapestSeller = prices.flatMap((p) => p.sellers).sort((a, b) => a.price - b.price)[0]
-          cheapest = cheapestSeller ? { price: cheapestSeller.price, currency: cheapestSeller.currency } : null
-
-          const fresh = readBooks()
-          const idx = fresh.findIndex((b) => b.id === book.id)
-          if (idx !== -1) {
-            fresh[idx].prices = prices
-            fresh[idx].pricesLastChecked = new Date().toISOString()
-            writeBooks(fresh)
-          }
-        } catch (e) {
-          error = (e as Error).message || 'Unknown error'
-          scrapeState.errors++
-          log('error', 'scraper', `Failed to scrape "${book.title}"`, error)
-        }
-
-        scrapeState.log.push({
-          title: book.title,
-          sellers: totalSellers,
-          cheapest,
-          error,
-        })
-
-        console.log(`[${i + 1}/${toScrape.length}] ${book.title.slice(0, 50)} — ${totalSellers} sellers${error ? ` (ERROR: ${error})` : ''}`)
-      }
-    } finally {
-      scrapeState.running = false
-      scrapeState.current = scrapeState.total
-      scrapeState.currentTitle = ''
-    }
-  })()
-})
-
-// Debug endpoint: fetch raw HTML for an ISBN so you can inspect the scraper selectors
-app.get('/api/debug-scrape/:isbn', async (req, res) => {
-  const url = `https://www.isbns.net/isbn/${req.params.isbn}/`
-  const html = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0' },
-  }).then((r) => r.text())
-  res.type('html').send(html)
-})
-
 // ── Logs ─────────────────────────────────────────────────────────────────────
 
 app.get('/api/logs', (_req, res) => {
@@ -600,12 +458,21 @@ app.delete('/api/logs', (_req, res) => {
   res.json({ ok: true })
 })
 
-const server = app.listen(PORT, () => {
-  console.log(`Book wishlist server running at http://localhost:${PORT}`)
+// ── Production frontend ──────────────────────────────────────────────────────
+
+const CLIENT_DIST = resolve(__dirname, '../../client/dist')
+if (existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST))
+  app.get('*', (_req, res) => {
+    res.sendFile(resolve(CLIENT_DIST, 'index.html'))
+  })
+}
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`Book wishlist server running at http://${HOST}:${PORT}`)
 })
 
-process.on('SIGINT', async () => {
-  await closeBrowser()
+process.on('SIGINT', () => {
   server.close()
   process.exit(0)
 })

@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import type { WishlistBook } from '../types'
 import { isUSSeller, isDistantSeller } from '../lib/filters'
 
@@ -34,6 +34,7 @@ const CUR: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' }
 
 const SOURCE_STYLES: Record<string, { bg: string; label: string }> = {
   bookfinder: { bg: 'bg-purple-500/15 text-purple-400', label: 'BF' },
+  iberlibro: { bg: 'bg-sky-500/15 text-sky-400', label: 'IB' },
 }
 
 function SourceBadge({ source }: { source?: string }) {
@@ -202,7 +203,7 @@ export default function DealsView({ books, excludeUS, excludeDistant }: Props) {
   if (deals.length === 0) {
     return (
       <div className="text-center py-16 text-slate-600 text-sm">
-        No price data yet. Run "Check all prices" first.
+        No price data yet. Run the local price scraper first.
       </div>
     )
   }

@@ -1,21 +1,19 @@
 import { useState, useMemo } from 'react'
-import { scrapeBookPrices } from '../lib/api'
 import { isUSSeller, isDistantSeller } from '../lib/filters'
 import type { WishlistBook } from '../types'
 
 interface Props {
   book: WishlistBook
   onEdit: (book: WishlistBook) => void
-  onUpdate: (book: WishlistBook) => void
   onDelete: (id: string) => void
   forceShowPrices?: boolean
   excludeUS?: boolean
   excludeDistant?: boolean
-  scrapeQuery?: string
 }
 
 const SOURCE_STYLES: Record<string, { bg: string; label: string }> = {
   bookfinder: { bg: 'bg-purple-500/15 text-purple-400', label: 'BF' },
+  iberlibro: { bg: 'bg-sky-500/15 text-sky-400', label: 'IB' },
 }
 
 function SourceBadge({ source }: { source?: string }) {
@@ -38,9 +36,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPrices, excludeUS, excludeDistant, scrapeQuery }: Props) {
-  const [scraping, setScraping] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export default function BookCard({ book, onEdit, onDelete, forceShowPrices, excludeUS, excludeDistant }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [localShowPrices, setLocalShowPrices] = useState(false)
   const showPrices = forceShowPrices || localShowPrices
@@ -58,20 +54,6 @@ export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPr
   const allSellers = filteredPrices.flatMap((p) => p.sellers)
   const effectivePrice = (s: typeof allSellers[0]) => s.totalPrice ?? s.price
   const cheapest = allSellers.length > 0 ? allSellers.reduce((a, b) => (effectivePrice(a) < effectivePrice(b) ? a : b)) : null
-
-  const handleScrape = async () => {
-    setScraping(true)
-    setError(null)
-    try {
-      const updated = await scrapeBookPrices(book.id, scrapeQuery)
-      onUpdate(updated)
-      setLocalShowPrices(true)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch prices')
-    } finally {
-      setScraping(false)
-    }
-  }
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all">
@@ -168,28 +150,7 @@ export default function BookCard({ book, onEdit, onUpdate, onDelete, forceShowPr
             </a>
           )}
 
-          <button
-            onClick={handleScrape}
-            disabled={scraping || book.isbns.length === 0}
-            className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 transition-colors flex items-center gap-1.5"
-          >
-            {scraping ? (
-              <>
-                <div className="w-3 h-3 border-2 border-slate-600 border-t-amber-400 rounded-full animate-spin" />
-                Checking...
-              </>
-            ) : (
-              <>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {book.pricesLastChecked ? 'Refresh' : 'Check prices'}
-              </>
-            )}
-          </button>
         </div>
-
-        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
 
         {showPrices && filteredPrices.some(p => p.sellers.length > 0) && (
           <div className="mt-3 space-y-3">

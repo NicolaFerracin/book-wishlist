@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import BookCard from './components/BookCard'
 import BookFormModal from './components/BookFormModal'
-import BulkScrapePanel from './components/BulkScrapePanel'
 import DealsView from './components/DealsView'
 import ImportModal from './components/ImportModal'
 import LogsModal from './components/LogsModal'
@@ -10,15 +9,6 @@ import CleanupButton from './components/CleanupButton'
 import Toast from './components/Toast'
 import { addBook, deleteBook, getBooks, updateBook } from './lib/api'
 import type { WishlistBook } from './types'
-
-const REGIONS: Record<string, { label: string; amazonDomain: string; currency: string; country: string }> = {
-  pt: { label: 'Portugal', amazonDomain: 'amazon.es', currency: 'EUR', country: 'pt' },
-  es: { label: 'Spain', amazonDomain: 'amazon.es', currency: 'EUR', country: 'es' },
-  it: { label: 'Italy', amazonDomain: 'amazon.it', currency: 'EUR', country: 'it' },
-  de: { label: 'Germany', amazonDomain: 'amazon.de', currency: 'EUR', country: 'de' },
-  fr: { label: 'France', amazonDomain: 'amazon.fr', currency: 'EUR', country: 'fr' },
-  uk: { label: 'United Kingdom', amazonDomain: 'amazon.co.uk', currency: 'GBP', country: 'gb' },
-}
 
 export default function App() {
   const [books, setBooks] = useState<WishlistBook[]>([])
@@ -34,15 +24,6 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [region, setRegion] = useState(() => localStorage.getItem('bw-region') || 'pt')
-
-  const regionConfig = REGIONS[region] || REGIONS.es
-  const scrapeQuery = `amazonDomain=${regionConfig.amazonDomain}&currency=${regionConfig.currency}&country=${regionConfig.country}`
-
-  const handleRegionChange = (value: string) => {
-    setRegion(value)
-    localStorage.setItem('bw-region', value)
-  }
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -83,10 +64,6 @@ export default function App() {
     handleCloseForm()
   }
 
-  const handleUpdate = (updated: WishlistBook) => {
-    setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
-  }
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
@@ -98,16 +75,6 @@ export default function App() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={region}
-            onChange={(e) => handleRegionChange(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-          >
-            {Object.entries(REGIONS).map(([key, r]) => (
-              <option key={key} value={key}>{r.label}</option>
-            ))}
-          </select>
-          <BulkScrapePanel onDone={refresh} scrapeQuery={scrapeQuery} onStarted={() => setToast('Price check running in the background — you can close this window.')} />
           <CleanupButton onDone={refresh} onStarted={() => setToast('ISBN cleanup running — removing audiobooks and wrong-language editions.')} />
           <EnrichButton onDone={refresh} onStarted={() => setToast('Metadata enrichment running in the background — you can close this window.')} />
           <button
@@ -233,11 +200,9 @@ export default function App() {
                 book={book}
                 onEdit={(b) => { setEditingBook(b); setShowForm(true) }}
                 onDelete={async (id) => { await deleteBook(id); setBooks(prev => prev.filter(b => b.id !== id)) }}
-                onUpdate={handleUpdate}
                 forceShowPrices={expandPrices}
                 excludeUS={excludeUS}
                 excludeDistant={excludeDistant}
-                scrapeQuery={scrapeQuery}
               />
             ))}
           </div>

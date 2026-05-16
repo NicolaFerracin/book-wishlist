@@ -1,5 +1,7 @@
 node_modules/
 dist/
+*.tsbuildinfo
+.env
 
 # Personal data — don't commit your book list, prices, or logs
 data/wishlist.json
