@@ -6,4 +6,6 @@ server/dist
 .git
 .env
 data/*.json
+data/*.sqlite
+data/*.sqlite-*
 npm-debug.log*

@@ -28,4 +28,5 @@ COPY --from=build /app/client/dist ./client/dist
 COPY data/.gitkeep ./data/.gitkeep
 
 EXPOSE 3001
+USER node
 CMD ["npm", "--prefix", "server", "run", "start"]

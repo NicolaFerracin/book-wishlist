@@ -3,7 +3,7 @@ import cors from 'cors'
 import { existsSync } from 'fs'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { readBooks, writeBooks } from './storage.js'
+import { clearAllPrices, readBooks, writeBooks } from './storage.js'
 import { log, getLogs, clearLogs } from './logger.js'
 import type { WishlistBook } from './types.js'
 
@@ -63,6 +63,11 @@ app.put('/api/books/:id/prices', (req, res) => {
   books[idx].pricesLastChecked = pricesLastChecked || new Date().toISOString()
   writeBooks(books)
   res.json(books[idx])
+})
+
+app.delete('/api/prices', (_req, res) => {
+  const cleared = clearAllPrices()
+  res.json({ cleared })
 })
 
 // ── Import ───────────────────────────────────────────────────────────────────

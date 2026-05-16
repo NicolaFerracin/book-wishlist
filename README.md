@@ -34,20 +34,20 @@ Open `http://localhost:5174`
 client/          → Vite + React + TypeScript + Tailwind CSS
 server/          → Express API + production static file server
 scripts/         → One-off import/scrape scripts
-data/            → wishlist.json + logs.json (local, gitignored)
+data/            → book-wishlist.sqlite (local, gitignored)
 ```
 
 - **Client** (port 5174): React SPA with Vite dev server, proxies `/api` to the server
 - **Server** (port 3001): Express API for book CRUD, imports, metadata enrichment, logs, JSON file storage
 - **Scraper**: manual local Playwright script that can update either a local `wishlist.json` file or a running server API
-- **Data**: `data/wishlist.json` stores all books and cached prices locally. `data/logs.json` stores error logs.
+- **Data**: `data/book-wishlist.sqlite` stores books, cached prices, and logs locally. If `data/wishlist.json` or `data/logs.json` exists and the database is empty, the server imports those legacy files on startup.
 
 ```mermaid
 flowchart LR
   browser[Browser] --> cf[Cloudflare Access]
   cf --> tunnel[Cloudflare Tunnel]
   tunnel --> web[Self-hosted web app]
-  web --> data[(data/wishlist.json)]
+  web --> data[(data/book-wishlist.sqlite)]
 
   laptop[Local scraper machine] --> api[LAN or localhost API]
   api --> web
@@ -58,7 +58,7 @@ flowchart LR
 sequenceDiagram
   participant User
   participant App as Hosted app
-  participant Data as wishlist.json
+  participant Data as SQLite DB
   participant Scraper as Local scraper
   participant Sites as Price websites
 
@@ -163,9 +163,10 @@ npm run scrape:prices -- --force
 npm run scrape:prices -- --limit 10
 npm run scrape:prices -- --file ./data/wishlist.json
 npm run scrape:prices -- --api http://server.local:3001
+npm run scrape:prices -- --clear-prices
 ```
 
-When `BOOK_WISHLIST_API` or `--api` is set, the scraper reads books from `GET /api/books` and writes prices back with `PUT /api/books/:id/prices`. When no API is set, it updates the local JSON file directly.
+When `BOOK_WISHLIST_API` or `--api` is set, the scraper reads books from `GET /api/books` and writes prices back with `PUT /api/books/:id/prices`. When no API is set, it updates a local JSON file directly.
 
 ## Importing Books
 
@@ -192,11 +193,11 @@ Click the **refresh icon** in the header to bulk-fetch covers and edition ISBNs 
 
 ## Data Backup
 
-Your book data lives in `data/wishlist.json` (gitignored). To avoid losing it:
+Your book data lives in `data/book-wishlist.sqlite` (gitignored). To avoid losing it:
 
 - **Cloud sync**: symlink to a synced folder (Dropbox, iCloud, etc.):
   ```bash
-  mv data/wishlist.json ~/Dropbox/wishlist.json
-  ln -s ~/Dropbox/wishlist.json data/wishlist.json
+  mv data/book-wishlist.sqlite ~/Dropbox/book-wishlist.sqlite
+  ln -s ~/Dropbox/book-wishlist.sqlite data/book-wishlist.sqlite
   ```
-- **Manual backup**: `cp data/wishlist.json ~/backup/wishlist-$(date +%Y%m%d).json`
+- **Manual backup**: `sqlite3 data/book-wishlist.sqlite ".backup 'backup/book-wishlist-$(date +%Y%m%d).sqlite'"`

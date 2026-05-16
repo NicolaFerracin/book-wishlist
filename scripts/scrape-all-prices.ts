@@ -1,11 +1,12 @@
 /**
  * Scrapes prices for all books with ISBNs.
- * Usage: tsx scripts/scrape-all-prices.ts [--force] [--limit N] [--file path] [--api URL]
+ * Usage: tsx scripts/scrape-all-prices.ts [--force] [--limit N] [--file path] [--api URL] [--clear-prices]
  *
  * --force   Re-scrape books that already have price data
  * --limit N Only scrape the first N books (useful for testing)
  * --file    Read/write a wishlist JSON file (defaults to data/wishlist.json)
  * --api     Read/write through a running Book Wishlist server API
+ * --clear-prices Remove all saved price data and exit
  *
  * BOOK_WISHLIST_API can also be used instead of --api.
  */
@@ -108,6 +109,7 @@ async function scrapeBook(book: WishlistBook, maxAttempts = 5): Promise<PriceRes
 
 async function main() {
   const force = process.argv.includes('--force')
+  const clearPrices = process.argv.includes('--clear-prices')
   const limitArg = process.argv.indexOf('--limit')
   const limit = limitArg !== -1 ? parseInt(process.argv[limitArg + 1]) : Infinity
   const fileArg = process.argv.indexOf('--file')
@@ -121,6 +123,23 @@ async function main() {
   const books = apiBase
     ? await fetchBooks(apiBase)
     : JSON.parse(readFileSync(dataPath, 'utf-8')) as WishlistBook[]
+
+  if (clearPrices) {
+    if (apiBase) {
+      const cleared = await clearRemotePrices(apiBase)
+      console.log(`Cleared saved prices for ${cleared} books.`)
+      return
+    }
+
+    const withPrices = books.filter(b => b.pricesLastChecked || (b.prices?.length ?? 0) > 0)
+    for (const book of withPrices) {
+      book.prices = []
+      delete book.pricesLastChecked
+    }
+    writeFileSync(dataPath, JSON.stringify(books, null, 2))
+    console.log(`Cleared saved prices for ${withPrices.length} books.`)
+    return
+  }
 
   const toScrape = books.filter(b => {
     if ((b.isbns?.length ?? 0) === 0 && !b.isbn && !b.asin) return false
@@ -185,6 +204,13 @@ async function updateBookPrices(apiBase: string, id: string, prices: PriceResult
     body: JSON.stringify({ prices, pricesLastChecked }),
   })
   if (!res.ok) throw new Error(`Failed to update prices for ${id}: ${res.status} ${res.statusText}`)
+}
+
+async function clearRemotePrices(apiBase: string): Promise<number> {
+  const res = await fetch(`${apiBase}/api/prices`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Failed to clear prices: ${res.status} ${res.statusText}`)
+  const data = await res.json() as { cleared: number }
+  return data.cleared
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

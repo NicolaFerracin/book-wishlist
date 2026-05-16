@@ -7,6 +7,8 @@ dist/
 data/wishlist.json
 data/wishlist.backup.*.json
 data/logs.json
+data/*.sqlite
+data/*.sqlite-*
 
 # Keep the empty data dir with a placeholder
 !data/.gitkeep
