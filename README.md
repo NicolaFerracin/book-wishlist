@@ -138,7 +138,19 @@ npm run install:all
 npx playwright install chromium
 ```
 
-To update a self-hosted app that your machine can reach locally:
+If the hosted app is bound to `127.0.0.1` on the server, open an SSH tunnel from the scraper machine:
+
+```bash
+ssh -L 3001:127.0.0.1:3001 user@server.local
+```
+
+Then run the scraper in another terminal:
+
+```bash
+BOOK_WISHLIST_API=http://127.0.0.1:3001 npm run scrape:prices
+```
+
+If you intentionally expose the app on your LAN instead, point the scraper at the server address:
 
 ```bash
 BOOK_WISHLIST_API=http://server.local:3001 npm run scrape:prices
